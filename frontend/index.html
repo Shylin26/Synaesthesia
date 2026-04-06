@@ -355,7 +355,7 @@ footer p{font-size:0.68rem;color:var(--text3)}
   </footer>
 </div>
 <script>
-const EC = {HAPPY:[29,185,84],SAD:[30,215,254],ANGRY:[255,75,75],CALM:[255,200,60]};
+const EC = {HAPPY:[29,185,84],SAD:[30,215,254],ANGRY:[255,75,75],CALM:[255,200,60],UNCERTAIN:[120,120,120]};
 function toHex(rgb){return '#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join('')}
 function lerp(a,b,t){return a.map((v,i)=>v+(b[i]-v)*t)}
 
@@ -364,7 +364,7 @@ const dropZone=document.getElementById('dropZone');
 const fileInput=document.getElementById('fileInput');
 const analyzeBtn=document.getElementById('analyzeBtn');
 const statusLine=document.getElementById('statusLine');
-let selectedFile=null,melodyNotes=[],curEmotion='';
+let selectedFile=null,melodyNotes=[],curEmotion='',curBpm=120;
 
 dropZone.addEventListener('click',()=>fileInput.click());
 fileInput.addEventListener('change',e=>pick(e.target.files[0]));
@@ -426,7 +426,7 @@ analyzeBtn.addEventListener('click',async()=>{
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render(data){
-  melodyNotes=data.melody;curEmotion=data.emotion;
+  melodyNotes=data.melody;curEmotion=data.emotion;curBpm=data.bpm||120;
   const rgb=EC[data.emotion]||[255,255,255];
   const hex=toHex(rgb);
 
@@ -438,9 +438,9 @@ function render(data){
   document.getElementById('npBg').style.background=
     `linear-gradient(135deg, rgba(${rgb},0.18) 0%, transparent 60%)`;
 
-  document.getElementById('npEmotion').textContent=data.emotion;
+  document.getElementById('npEmotion').textContent=data.blend||data.emotion;
   document.getElementById('npEmotion').style.color=hex;
-  document.getElementById('npConf').textContent=data.confidence+'% confidence';
+  document.getElementById('npConf').textContent=data.confidence+'% confidence · '+Math.round(data.bpm||0)+' BPM';
   document.getElementById('npSong').textContent=data.song_match;
 
   // scores
@@ -518,7 +518,7 @@ document.getElementById('downloadMidiBtn').addEventListener('click',async()=>{
   if(!melodyNotes.length)return;
   const res=await fetch('http://127.0.0.1:8000/export-midi',{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({notes:melodyNotes,emotion:curEmotion})
+    body:JSON.stringify({notes:melodyNotes,emotion:curEmotion,bpm:curBpm||120})
   });
   const blob=await res.blob();
   const url=URL.createObjectURL(blob);

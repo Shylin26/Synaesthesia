@@ -62,26 +62,22 @@ def health():
 
 @app.post("/export-midi")
 def export_midi(req: MidiRequest):
-    EMOTION_BPM={"HAPPY": 128, "SAD": 72, "ANGRY": 145, "CALM": 88}
-    bpm=EMOTION_BPM.get(req.emotion,req.bpm)
-    seconds_per_beat=60.0/bpm
-    note_duration=seconds_per_beat*0.5
+    bpm = req.bpm if req.bpm != 120 else {"HAPPY": 128, "SAD": 72, "ANGRY": 145, "CALM": 88}.get(req.emotion, 120)
+    seconds_per_beat = 60.0 / bpm
+    note_duration = seconds_per_beat * 0.5
     midi = pretty_midi.PrettyMIDI(initial_tempo=bpm)
     instrument = pretty_midi.Instrument(program=0)
     for i, pitch in enumerate(req.notes):
-        start=i*seconds_per_beat*0.5
-        note=pretty_midi.Note(velocity=90,pitch=int(pitch),
-        start=start,end=start+note_duration)
+        start = i * seconds_per_beat * 0.5
+        note = pretty_midi.Note(velocity=90, pitch=int(pitch),
+                                start=start, end=start + note_duration)
         instrument.notes.append(note)
     midi.instruments.append(instrument)
-
-    with tempfile.NamedTemporaryFile(delete=False,suffix=".mid") as tmp:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mid") as tmp:
         midi.write(tmp.name)
-        tmp_path=tmp.name
+        tmp_path = tmp.name
     return FileResponse(
         tmp_path,
         media_type="audio/midi",
         filename=f"synaesthesia_{req.emotion.lower()}_melody.mid"
-    
-
     )

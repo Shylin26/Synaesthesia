@@ -13,13 +13,19 @@ def load_melody_model():
     model.eval()
     return model
 EMOTION_PROMPTS = {
-    "HAPPY": torch.tensor([[60, 64, 67, 72]]),   # C major chord
-    "SAD":   torch.tensor([[57, 60, 64, 67]]),   # A minor chord
-    "ANGRY": torch.tensor([[60, 61, 66, 67]]),   # tritone + semitone
-    "CALM":  torch.tensor([[60, 62, 64, 67]]),   # C pentatonic
+    "HAPPY":     torch.tensor([[60, 64, 67, 72]]),
+    "SAD":       torch.tensor([[57, 60, 64, 67]]),
+    "ANGRY":     torch.tensor([[60, 61, 66, 67]]),
+    "CALM":      torch.tensor([[60, 62, 64, 67]]),
+    "UNCERTAIN": torch.tensor([[60, 62, 64, 67]]),  # default to calm
 }
+
+EMOTION_IDS = {"HAPPY": 0, "SAD": 1, "ANGRY": 2, "CALM": 3, "UNCERTAIN": 3}
 def run_pipeline(audio_path:str,melody_length:int=20,temperature:float=0.8)->dict:
     y,sr=librosa.load(audio_path)
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    bpm = round(float(np.squeeze(tempo)), 1)
+    auto_temperature = min(1.5, max(0.5, bpm / 120.0))
     D=librosa.stft(y)
     S_db=librosa.amplitude_to_db(np.abs(D),ref=np.max)
     neighbourhood=ndimage.maximum_filter(S_db,size=10)
@@ -33,19 +39,21 @@ def run_pipeline(audio_path:str,melody_length:int=20,temperature:float=0.8)->dic
     confidence=emotion_result["confidence"]
     scores=emotion_result['scores']
     melody_model=load_melody_model()
-    emotion_id = ["HAPPY", "SAD", "ANGRY", "CALM"].index(emotion_label)
+    emotion_id = EMOTION_IDS.get(emotion_label, 3)
     start_sequence=EMOTION_PROMPTS[emotion_label]
-    melody_notes = generate_melody(melody_model, start_sequence, emotion_id, 
-                                   length=melody_length, temperature=temperature)
+    melody_notes = generate_melody(melody_model, start_sequence, emotion_id,
+                                   length=melody_length, temperature=auto_temperature)
     return{
-    "song_match": song_match,
+        "song_match": song_match,
         "emotion": emotion_label,
         "confidence": confidence,
+        "secondary": emotion_result.get("secondary"),
+        "blend": emotion_result.get("blend", emotion_label),
         "emotion_scores": scores,
+        "bpm": bpm,
         "melody": melody_notes,
         "melody_length": len(melody_notes)
-
-}  
+    }
    
 if __name__ == "__main__":
     import librosa
