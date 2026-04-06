@@ -334,6 +334,19 @@ footer p{font-size:0.68rem;color:var(--text3)}
           </div>
         </div>
 
+
+        <!-- chord progression -->
+        <div class="card" id="chordCard" style="display:none">
+          <div class="panel-title">Chord Progression</div>
+          <div id="chordProgression" style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-bottom:1rem"></div>
+          <div style="display:flex;gap:2rem;font-size:0.72rem;color:var(--text2)">
+            <span>Key: <b id="chordKey" style="color:var(--text)"></b></span>
+            <span>Mode: <b id="chordMode" style="color:var(--text)"></b></span>
+            <span>Tempo: <b id="chordTempo" style="color:var(--text)"></b></span>
+          </div>
+          <div style="margin-top:0.8rem;font-size:0.72rem;color:var(--text3)" id="chordInstruments"></div>
+          <div style="margin-top:0.5rem;font-size:0.72rem;color:var(--text3);font-style:italic" id="chordDesc"></div>
+        </div>
         <!-- actions -->
         <div class="action-row">
           <button class="btn-action primary" id="playBtn">&#9654;&nbsp; Play Melody</button>
@@ -364,7 +377,7 @@ const dropZone=document.getElementById('dropZone');
 const fileInput=document.getElementById('fileInput');
 const analyzeBtn=document.getElementById('analyzeBtn');
 const statusLine=document.getElementById('statusLine');
-let selectedFile=null,melodyNotes=[],curEmotion='',curBpm=120;
+let selectedFile=null,melodyNotes=[],curEmotion='',curBpm=120,sessionId=null;
 
 dropZone.addEventListener('click',()=>fileInput.click());
 fileInput.addEventListener('change',e=>pick(e.target.files[0]));
@@ -411,13 +424,15 @@ recBtn.addEventListener('click',async()=>{
 // ── Analyse ───────────────────────────────────────────────────────────────────
 analyzeBtn.addEventListener('click',async()=>{
   if(!selectedFile)return;
+  if(!sessionId){sessionId=Math.random().toString(36).slice(2,10);}
   analyzeBtn.disabled=true;
   statusLine.innerHTML='<span class="spin"></span>Analysing…';
   document.getElementById('resultContent').style.display='none';
   document.getElementById('idleState').style.display='flex';
   const fd=new FormData();fd.append('file',selectedFile);
   try{
-    const res=await fetch('http://127.0.0.1:8000/analyze',{method:'POST',body:fd});
+    const apiUrl='http://127.0.0.1:8000/analyze'+(sessionId?'?session_id='+sessionId:'');
+    const res=await fetch(apiUrl,{method:'POST',body:fd});
     if(!res.ok)throw new Error(await res.text());
     render(await res.json());statusLine.textContent='';
   }catch(e){statusLine.textContent='Error: '+e.message;}

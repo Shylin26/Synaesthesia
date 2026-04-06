@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import pretty_midi
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from engine.pipeline import run_pipeline
+from engine.emotion_tracker import get_emotional_arc, new_session_id
 class MidiRequest(BaseModel):
     notes: List[int]
     emotion : str
@@ -38,7 +39,7 @@ def serve_frontend():
 
 
 @app.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(file: UploadFile = File(...), session_id: Optional[str] = None):
     if not file.filename.endswith((".wav", ".mp3", ".ogg", ".flac", ".webm")):
         raise HTTPException(status_code=400, detail="Unsupported file format.")
 
@@ -47,13 +48,23 @@ async def analyze(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     try:
-        result = run_pipeline(tmp_path)
+        result = run_pipeline(tmp_path, session_id=session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         os.remove(tmp_path)
 
     return result
+
+
+@app.get("/session/{session_id}")
+def get_session(session_id: str):
+    return get_emotional_arc(session_id)
+
+
+@app.get("/session/new")
+def create_session():
+    return {"session_id": new_session_id()}
 
 
 @app.get("/health")

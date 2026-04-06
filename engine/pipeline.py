@@ -5,6 +5,10 @@ from engine.predict_emotion import predict_emotion,load_model as load_emotion_mo
 from engine.melody_transformer import MelodyTransformer,generate_melody
 from engine.fingerprinter import generate_hashes
 from engine.db import recognize_audio
+from engine.emotion_tracker import setup_tracker, log_emotion, new_session_id
+from engine.chord_generator import generate_chords_from_pipeline
+
+setup_tracker()
 
 MELODY_MODEL_PATH="/Users/parishachauhan/SYNAESTHESIA/models/melody_transformer.pt"
 def load_melody_model():
@@ -21,7 +25,7 @@ EMOTION_PROMPTS = {
 }
 
 EMOTION_IDS = {"HAPPY": 0, "SAD": 1, "ANGRY": 2, "CALM": 3, "UNCERTAIN": 3}
-def run_pipeline(audio_path:str,melody_length:int=20,temperature:float=0.8)->dict:
+def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, session_id:str=None)->dict:
     y,sr=librosa.load(audio_path)
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     bpm = round(float(np.squeeze(tempo)), 1)
@@ -43,7 +47,7 @@ def run_pipeline(audio_path:str,melody_length:int=20,temperature:float=0.8)->dic
     start_sequence=EMOTION_PROMPTS[emotion_label]
     melody_notes = generate_melody(melody_model, start_sequence, emotion_id,
                                    length=melody_length, temperature=auto_temperature)
-    return{
+    result = {
         "song_match": song_match,
         "emotion": emotion_label,
         "confidence": confidence,
@@ -52,8 +56,13 @@ def run_pipeline(audio_path:str,melody_length:int=20,temperature:float=0.8)->dic
         "emotion_scores": scores,
         "bpm": bpm,
         "melody": melody_notes,
-        "melody_length": len(melody_notes)
+        "melody_length": len(melody_notes),
+        "session_id": session_id,
+        "chords": generate_chords_from_pipeline(emotion_result)
     }
+    if session_id:
+        log_emotion(session_id, result)
+    return result
    
 if __name__ == "__main__":
     import librosa
