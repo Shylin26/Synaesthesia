@@ -2,7 +2,7 @@ import sqlite3
 import os
 import uuid
 from datetime import datetime
-DB_PATH = "/Users/parishachauhan/SYNAESTHESIA/data/fingerprints.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'fingerprints.db')
 VA_MAP = {
     "HAPPY":     (0.7,  0.6),
     "SAD":       (-0.6, -0.5),

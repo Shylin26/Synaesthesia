@@ -10,7 +10,7 @@ from engine.chord_generator import generate_chords_from_pipeline
 
 setup_tracker()
 
-MELODY_MODEL_PATH="/Users/parishachauhan/SYNAESTHESIA/models/melody_transformer.pt"
+MELODY_MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'melody_transformer.pt')
 def load_melody_model():
     model=MelodyTransformer()
     model.load_state_dict(torch.load(MELODY_MODEL_PATH,map_location='cpu'))

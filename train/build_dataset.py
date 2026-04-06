@@ -4,8 +4,8 @@ import numpy as np
 from tqdm import tqdm
 sys.path.append(os.path.join(os.path.dirname(__file__),'..'))
 from engine.feature_extractor import extract_features_from_file
-RAVDESS_DIR="/Users/parishachauhan/SYNAESTHESIA/data/ravdess/Ravdess"
-OUTPUT_PATH="/Users/parishachauhan/SYNAESTHESIA/data/dataset.npz"
+RAVDESS_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'ravdess', 'Ravdess')
+OUTPUT_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'dataset.npz')
 EMOTION_MAP={
     1:3,# key is ravdess code value is our class index
     2:3,

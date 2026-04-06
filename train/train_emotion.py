@@ -10,9 +10,9 @@ import pickle
 sys.path.append(os.path.join(os.path.dirname(__file__),'..'))
 from engine.emotion_transformer import EmotionTransformer
 
-DATASET_PATH="/Users/parishachauhan/SYNAESTHESIA/data/dataset.npz"
-MODEL_SAVE_PATH="/Users/parishachauhan/SYNAESTHESIA/models/emotion_transformer.pt"
-SCALER_SAVE_PATH="/Users/parishachauhan/SYNAESTHESIA/models/scaler.pkl"
+DATASET_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'dataset.npz')
+MODEL_SAVE_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'emotion_transformer.pt')
+SCALER_SAVE_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'scaler.pkl')
 EPOCHS=50
 BATCH_SIZE=32
 LR=0.001

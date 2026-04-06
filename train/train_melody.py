@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, TensorDataset
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from engine.melody_transformer import MelodyTransformer
 
-MODEL_SAVE_PATH = "/Users/parishachauhan/SYNAESTHESIA/models/melody_transformer.pt"
+MODEL_SAVE_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'melody_transformer.pt')
 EPOCHS = 60
 BATCH_SIZE = 32
 LR = 0.001

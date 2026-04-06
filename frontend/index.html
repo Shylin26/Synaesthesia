@@ -5,7 +5,199 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Synaesthesia</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js">
+  // ── Mode switching ────────────────────────────────────────────────────────
+  function switchMode(mode) {
+    document.getElementById('analysePanel').style.display   = mode==='analyse'   ? 'grid'  : 'none';
+    document.getElementById('therapyPanel').classList.toggle('active', mode==='therapy');
+    document.getElementById('educationPanel').style.display = mode==='education' ? 'block' : 'none';
+    ['tabAnalyse','tabTherapy','tabEducation'].forEach(id => {
+      document.getElementById(id).classList.remove('active');
+    });
+    document.getElementById('tab'+mode.charAt(0).toUpperCase()+mode.slice(1)).classList.add('active');
+  }
+
+  // ── Therapy mode ──────────────────────────────────────────────────────────
+  const EC_HEX = {HAPPY:'#1db954',SAD:'#60a5fa',ANGRY:'#f87171',CALM:'#fbbf24'};
+  let therapyCurrent = null, therapyTarget = null;
+
+  function selectCurrent(btn) {
+    document.querySelectorAll('#currentGrid .emotion-btn').forEach(b => {
+      b.classList.remove('selected');
+      b.style.background = '';
+      b.style.color = '';
+    });
+    btn.classList.add('selected');
+    const c = EC_HEX[btn.dataset.emotion] || '#fff';
+    btn.style.background = c;
+    btn.style.color = '#000';
+    therapyCurrent = btn.dataset.emotion;
+    checkJourneyReady();
+  }
+
+  function selectTarget(btn) {
+    document.querySelectorAll('#targetGrid .emotion-btn').forEach(b => {
+      b.classList.remove('selected');
+      b.style.background = '';
+      b.style.color = '';
+    });
+    btn.classList.add('selected');
+    const c = EC_HEX[btn.dataset.emotion] || '#fff';
+    btn.style.background = c;
+    btn.style.color = '#000';
+    therapyTarget = btn.dataset.emotion;
+    checkJourneyReady();
+  }
+
+  function checkJourneyReady() {
+    document.getElementById('journeyBtn').disabled = !(therapyCurrent && therapyTarget);
+  }
+
+  async function generateJourney() {
+    if (!therapyCurrent || !therapyTarget) return;
+    document.getElementById('therapyStatus').innerHTML = '<span class="spin"></span>Generating journey...';
+    document.getElementById('journeySteps').innerHTML = '';
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/transition/${therapyCurrent}?target=${therapyTarget}`);
+      const data = await res.json();
+      renderJourney(data);
+      document.getElementById('therapyStatus').textContent = `${data.num_steps} steps · emotional distance ${data.emotional_distance}`;
+    } catch(e) {
+      document.getElementById('therapyStatus').textContent = 'Error: ' + e.message;
+    }
+  }
+
+  function renderJourney(data) {
+    const container = document.getElementById('journeySteps');
+    container.innerHTML = '';
+    data.steps.forEach((step, i) => {
+      const hex = EC_HEX[step.emotion] || '#fff';
+      const el = document.createElement('div');
+      el.className = 'journey-step';
+      el.style.borderLeftColor = hex;
+      el.style.borderLeftWidth = '3px';
+      el.innerHTML = `
+        <div class="step-num">STEP ${step.step}</div>
+        <div class="step-emotion" style="color:${hex}">${step.emotion}</div>
+        <div class="step-desc">${step.description}</div>
+        <div class="step-tempo">${step.suggested_tempo} BPM</div>
+        <button class="step-play" onclick="playStepMelody('${step.emotion}', ${step.suggested_tempo})">&#9654;</button>
+      `;
+      setTimeout(() => container.appendChild(el), i * 120);
+    });
+  }
+
+  async function playStepMelody(emotion, bpm) {
+    await Tone.start();
+    const PROMPTS = {
+      HAPPY:[60,64,67,72], SAD:[57,60,64,67], ANGRY:[60,61,66,67], CALM:[60,62,64,67]
+    };
+    const notes = PROMPTS[emotion] || PROMPTS.CALM;
+    const synth = new Tone.Synth({
+      oscillator:{type:'triangle'},
+      envelope:{attack:.05,decay:.2,sustain:.4,release:.8}
+    }).toDestination();
+    const now = Tone.now();
+    const interval = 60 / bpm;
+    notes.forEach((midi, i) => {
+      synth.triggerAttackRelease(Tone.Frequency(midi,'midi').toFrequency(), '8n', now + i * interval);
+    });
+  }
+
+  // ── Education mode ────────────────────────────────────────────────────────
+  let eduFile = null, eduTarget = null;
+
+  document.getElementById('eduDropZone').addEventListener('click', () => document.getElementById('eduFileInput').click());
+  document.getElementById('eduFileInput').addEventListener('change', e => pickEduFile(e.target.files[0]));
+  document.getElementById('eduDropZone').addEventListener('dragover', e => { e.preventDefault(); document.getElementById('eduDropZone').classList.add('over'); });
+  document.getElementById('eduDropZone').addEventListener('dragleave', () => document.getElementById('eduDropZone').classList.remove('over'));
+  document.getElementById('eduDropZone').addEventListener('drop', e => { e.preventDefault(); document.getElementById('eduDropZone').classList.remove('over'); pickEduFile(e.dataTransfer.files[0]); });
+
+  function pickEduFile(file) {
+    if (!file) return;
+    eduFile = file;
+    document.getElementById('eduDzMain').textContent = 'Ready';
+    const df = document.getElementById('eduDzFile');
+    df.textContent = file.name; df.style.display = 'block';
+    checkEduReady();
+  }
+
+  function selectEduTarget(btn) {
+    document.querySelectorAll('#eduTargetGrid .emotion-btn').forEach(b => {
+      b.classList.remove('selected'); b.style.background = ''; b.style.color = '';
+    });
+    btn.classList.add('selected');
+    const c = EC_HEX[btn.dataset.emotion] || '#fff';
+    btn.style.background = c; btn.style.color = '#000';
+    eduTarget = btn.dataset.emotion;
+    checkEduReady();
+  }
+
+  function checkEduReady() {
+    document.getElementById('eduAnalyseBtn').disabled = !(eduFile && eduTarget);
+  }
+
+  async function runEducationAnalysis() {
+    if (!eduFile || !eduTarget) return;
+    document.getElementById('eduAnalyseBtn').disabled = true;
+    document.getElementById('eduStatus').innerHTML = '<span class="spin"></span>Analysing performance...';
+    document.getElementById('eduResult').style.display = 'none';
+
+    const fd = new FormData();
+    fd.append('file', eduFile);
+    fd.append('target_emotion', eduTarget);
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/analyze-performance', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      renderEduResult(await res.json());
+      document.getElementById('eduStatus').textContent = '';
+    } catch(e) {
+      document.getElementById('eduStatus').textContent = 'Error: ' + e.message;
+    } finally {
+      document.getElementById('eduAnalyseBtn').disabled = false;
+    }
+  }
+
+  function renderEduResult(data) {
+    const score = data.match_score;
+    const hex = EC_HEX[data.target_emotion] || '#fff';
+    const detHex = EC_HEX[data.detected_emotion] || '#888';
+
+    const scoreEl = document.getElementById('eduScoreNum');
+    scoreEl.textContent = score + '%';
+    scoreEl.style.color = score >= 75 ? '#1db954' : score >= 50 ? '#fbbf24' : '#f87171';
+
+    document.getElementById('eduMatchLine').textContent =
+      `Target: ${data.target_emotion} · Detected: ${data.detected_emotion}`;
+    document.getElementById('eduMatchLine').style.color = hex;
+    document.getElementById('eduDetectedLine').textContent =
+      `Model confidence: ${data.detected_confidence}% · BPM: ${data.bpm}`;
+
+    const fl = document.getElementById('eduFeedbackList');
+    fl.innerHTML = '';
+    data.feedback.forEach(f => {
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;align-items:flex-start;gap:0.6rem;padding:0.6rem 0.8rem;background:rgba(255,255,255,0.03);border-radius:8px;font-size:0.78rem;color:var(--text2)';
+      el.innerHTML = `<span style="color:${score>=75?'#1db954':'#fbbf24'};flex-shrink:0">${score>=75?'✓':'→'}</span>${f}`;
+      fl.appendChild(el);
+    });
+
+    const sp = document.getElementById('eduScoresPanel');
+    sp.innerHTML = '';
+    Object.entries(data.emotion_scores).forEach(([label, val]) => {
+      const c = EC_HEX[label] || '#fff';
+      sp.innerHTML += `<div class="score-row">
+        <div class="score-name">${label}</div>
+        <div class="score-track"><div class="score-fill" style="background:${c}" data-v="${val}"></div></div>
+        <div class="score-val">${val}%</div>
+      </div>`;
+    });
+    setTimeout(() => document.querySelectorAll('#eduScoresPanel .score-fill').forEach(el => el.style.width = el.dataset.v + '%'), 60);
+
+    document.getElementById('eduResult').style.display = 'block';
+  }
+</script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -253,7 +445,34 @@ footer p{font-size:0.68rem;color:var(--text3)}
     <div class="nav-badge">BETA</div>
   </nav>
 
-  <div class="main">
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabAnalyse" onclick="switchMode('analyse')">Analyse</button>
+    <button class="mode-tab" id="tabTherapy" onclick="switchMode('therapy')">Therapy</button>
+    <button class="mode-tab" id="tabEducation" onclick="switchMode('education')">Education</button>
+  </div>
+
+  <!-- THERAPY MODE -->
+  <div class="therapy-panel" id="therapyPanel">
+    <div class="therapy-q">How are you feeling right now?</div>
+    <div class="emotion-grid" id="currentGrid">
+      <button class="emotion-btn" data-emotion="HAPPY" style="--ec:#1db954" onclick="selectCurrent(this)">HAPPY</button>
+      <button class="emotion-btn" data-emotion="SAD"   style="--ec:#60a5fa" onclick="selectCurrent(this)">SAD</button>
+      <button class="emotion-btn" data-emotion="ANGRY" style="--ec:#f87171" onclick="selectCurrent(this)">ANGRY</button>
+      <button class="emotion-btn" data-emotion="CALM"  style="--ec:#fbbf24" onclick="selectCurrent(this)">CALM</button>
+    </div>
+    <div class="therapy-q">Where do you want to go?</div>
+    <div class="emotion-grid" id="targetGrid">
+      <button class="emotion-btn" data-emotion="HAPPY" style="--ec:#1db954" onclick="selectTarget(this)">HAPPY</button>
+      <button class="emotion-btn" data-emotion="SAD"   style="--ec:#60a5fa" onclick="selectTarget(this)">SAD</button>
+      <button class="emotion-btn" data-emotion="ANGRY" style="--ec:#f87171" onclick="selectTarget(this)">ANGRY</button>
+      <button class="emotion-btn" data-emotion="CALM"  style="--ec:#fbbf24" onclick="selectTarget(this)">CALM</button>
+    </div>
+    <button class="journey-btn" id="journeyBtn" disabled onclick="generateJourney()">Generate My Journey</button>
+    <div class="therapy-status" id="therapyStatus"></div>
+    <div class="journey-steps" id="journeySteps"></div>
+  </div>
+  <div class="main" id="analysePanel">
 
     <!-- LEFT -->
     <div class="left-panel">
@@ -562,6 +781,198 @@ document.getElementById('clearHistory').addEventListener('click',()=>{
   document.getElementById('historyList').querySelectorAll('.h-item').forEach(el=>el.remove());
   document.getElementById('hEmpty').style.display='block';
 });
+
+  // ── Mode switching ────────────────────────────────────────────────────────
+  function switchMode(mode) {
+    document.getElementById('analysePanel').style.display   = mode==='analyse'   ? 'grid'  : 'none';
+    document.getElementById('therapyPanel').classList.toggle('active', mode==='therapy');
+    document.getElementById('educationPanel').style.display = mode==='education' ? 'block' : 'none';
+    ['tabAnalyse','tabTherapy','tabEducation'].forEach(id => {
+      document.getElementById(id).classList.remove('active');
+    });
+    document.getElementById('tab'+mode.charAt(0).toUpperCase()+mode.slice(1)).classList.add('active');
+  }
+
+  // ── Therapy mode ──────────────────────────────────────────────────────────
+  const EC_HEX = {HAPPY:'#1db954',SAD:'#60a5fa',ANGRY:'#f87171',CALM:'#fbbf24'};
+  let therapyCurrent = null, therapyTarget = null;
+
+  function selectCurrent(btn) {
+    document.querySelectorAll('#currentGrid .emotion-btn').forEach(b => {
+      b.classList.remove('selected');
+      b.style.background = '';
+      b.style.color = '';
+    });
+    btn.classList.add('selected');
+    const c = EC_HEX[btn.dataset.emotion] || '#fff';
+    btn.style.background = c;
+    btn.style.color = '#000';
+    therapyCurrent = btn.dataset.emotion;
+    checkJourneyReady();
+  }
+
+  function selectTarget(btn) {
+    document.querySelectorAll('#targetGrid .emotion-btn').forEach(b => {
+      b.classList.remove('selected');
+      b.style.background = '';
+      b.style.color = '';
+    });
+    btn.classList.add('selected');
+    const c = EC_HEX[btn.dataset.emotion] || '#fff';
+    btn.style.background = c;
+    btn.style.color = '#000';
+    therapyTarget = btn.dataset.emotion;
+    checkJourneyReady();
+  }
+
+  function checkJourneyReady() {
+    document.getElementById('journeyBtn').disabled = !(therapyCurrent && therapyTarget);
+  }
+
+  async function generateJourney() {
+    if (!therapyCurrent || !therapyTarget) return;
+    document.getElementById('therapyStatus').innerHTML = '<span class="spin"></span>Generating journey...';
+    document.getElementById('journeySteps').innerHTML = '';
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/transition/${therapyCurrent}?target=${therapyTarget}`);
+      const data = await res.json();
+      renderJourney(data);
+      document.getElementById('therapyStatus').textContent = `${data.num_steps} steps · emotional distance ${data.emotional_distance}`;
+    } catch(e) {
+      document.getElementById('therapyStatus').textContent = 'Error: ' + e.message;
+    }
+  }
+
+  function renderJourney(data) {
+    const container = document.getElementById('journeySteps');
+    container.innerHTML = '';
+    data.steps.forEach((step, i) => {
+      const hex = EC_HEX[step.emotion] || '#fff';
+      const el = document.createElement('div');
+      el.className = 'journey-step';
+      el.style.borderLeftColor = hex;
+      el.style.borderLeftWidth = '3px';
+      el.innerHTML = `
+        <div class="step-num">STEP ${step.step}</div>
+        <div class="step-emotion" style="color:${hex}">${step.emotion}</div>
+        <div class="step-desc">${step.description}</div>
+        <div class="step-tempo">${step.suggested_tempo} BPM</div>
+        <button class="step-play" onclick="playStepMelody('${step.emotion}', ${step.suggested_tempo})">&#9654;</button>
+      `;
+      setTimeout(() => container.appendChild(el), i * 120);
+    });
+  }
+
+  async function playStepMelody(emotion, bpm) {
+    await Tone.start();
+    const PROMPTS = {
+      HAPPY:[60,64,67,72], SAD:[57,60,64,67], ANGRY:[60,61,66,67], CALM:[60,62,64,67]
+    };
+    const notes = PROMPTS[emotion] || PROMPTS.CALM;
+    const synth = new Tone.Synth({
+      oscillator:{type:'triangle'},
+      envelope:{attack:.05,decay:.2,sustain:.4,release:.8}
+    }).toDestination();
+    const now = Tone.now();
+    const interval = 60 / bpm;
+    notes.forEach((midi, i) => {
+      synth.triggerAttackRelease(Tone.Frequency(midi,'midi').toFrequency(), '8n', now + i * interval);
+    });
+  }
+
+  // ── Education mode ────────────────────────────────────────────────────────
+  let eduFile = null, eduTarget = null;
+
+  document.getElementById('eduDropZone').addEventListener('click', () => document.getElementById('eduFileInput').click());
+  document.getElementById('eduFileInput').addEventListener('change', e => pickEduFile(e.target.files[0]));
+  document.getElementById('eduDropZone').addEventListener('dragover', e => { e.preventDefault(); document.getElementById('eduDropZone').classList.add('over'); });
+  document.getElementById('eduDropZone').addEventListener('dragleave', () => document.getElementById('eduDropZone').classList.remove('over'));
+  document.getElementById('eduDropZone').addEventListener('drop', e => { e.preventDefault(); document.getElementById('eduDropZone').classList.remove('over'); pickEduFile(e.dataTransfer.files[0]); });
+
+  function pickEduFile(file) {
+    if (!file) return;
+    eduFile = file;
+    document.getElementById('eduDzMain').textContent = 'Ready';
+    const df = document.getElementById('eduDzFile');
+    df.textContent = file.name; df.style.display = 'block';
+    checkEduReady();
+  }
+
+  function selectEduTarget(btn) {
+    document.querySelectorAll('#eduTargetGrid .emotion-btn').forEach(b => {
+      b.classList.remove('selected'); b.style.background = ''; b.style.color = '';
+    });
+    btn.classList.add('selected');
+    const c = EC_HEX[btn.dataset.emotion] || '#fff';
+    btn.style.background = c; btn.style.color = '#000';
+    eduTarget = btn.dataset.emotion;
+    checkEduReady();
+  }
+
+  function checkEduReady() {
+    document.getElementById('eduAnalyseBtn').disabled = !(eduFile && eduTarget);
+  }
+
+  async function runEducationAnalysis() {
+    if (!eduFile || !eduTarget) return;
+    document.getElementById('eduAnalyseBtn').disabled = true;
+    document.getElementById('eduStatus').innerHTML = '<span class="spin"></span>Analysing performance...';
+    document.getElementById('eduResult').style.display = 'none';
+
+    const fd = new FormData();
+    fd.append('file', eduFile);
+    fd.append('target_emotion', eduTarget);
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/analyze-performance', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      renderEduResult(await res.json());
+      document.getElementById('eduStatus').textContent = '';
+    } catch(e) {
+      document.getElementById('eduStatus').textContent = 'Error: ' + e.message;
+    } finally {
+      document.getElementById('eduAnalyseBtn').disabled = false;
+    }
+  }
+
+  function renderEduResult(data) {
+    const score = data.match_score;
+    const hex = EC_HEX[data.target_emotion] || '#fff';
+    const detHex = EC_HEX[data.detected_emotion] || '#888';
+
+    const scoreEl = document.getElementById('eduScoreNum');
+    scoreEl.textContent = score + '%';
+    scoreEl.style.color = score >= 75 ? '#1db954' : score >= 50 ? '#fbbf24' : '#f87171';
+
+    document.getElementById('eduMatchLine').textContent =
+      `Target: ${data.target_emotion} · Detected: ${data.detected_emotion}`;
+    document.getElementById('eduMatchLine').style.color = hex;
+    document.getElementById('eduDetectedLine').textContent =
+      `Model confidence: ${data.detected_confidence}% · BPM: ${data.bpm}`;
+
+    const fl = document.getElementById('eduFeedbackList');
+    fl.innerHTML = '';
+    data.feedback.forEach(f => {
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;align-items:flex-start;gap:0.6rem;padding:0.6rem 0.8rem;background:rgba(255,255,255,0.03);border-radius:8px;font-size:0.78rem;color:var(--text2)';
+      el.innerHTML = `<span style="color:${score>=75?'#1db954':'#fbbf24'};flex-shrink:0">${score>=75?'✓':'→'}</span>${f}`;
+      fl.appendChild(el);
+    });
+
+    const sp = document.getElementById('eduScoresPanel');
+    sp.innerHTML = '';
+    Object.entries(data.emotion_scores).forEach(([label, val]) => {
+      const c = EC_HEX[label] || '#fff';
+      sp.innerHTML += `<div class="score-row">
+        <div class="score-name">${label}</div>
+        <div class="score-track"><div class="score-fill" style="background:${c}" data-v="${val}"></div></div>
+        <div class="score-val">${val}%</div>
+      </div>`;
+    });
+    setTimeout(() => document.querySelectorAll('#eduScoresPanel .score-fill').forEach(el => el.style.width = el.dataset.v + '%'), 60);
+
+    document.getElementById('eduResult').style.display = 'block';
+  }
 </script>
 </body>
 </html>

@@ -7,8 +7,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__),'..'))
 from engine.emotion_transformer import EmotionTransformer
 from engine.feature_extractor import extract_features_from_file
 
-MODEL_PATH = "/Users/parishachauhan/SYNAESTHESIA/models/emotion_transformer.pt"
-SCALER_PATH = "/Users/parishachauhan/SYNAESTHESIA/models/scaler.pkl"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'emotion_transformer.pt')
+SCALER_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'scaler.pkl')
 
 EMOTION_LABELS={
     0:"HAPPY",
