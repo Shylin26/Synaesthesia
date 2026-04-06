@@ -14,6 +14,8 @@ from fastapi.responses import FileResponse
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from engine.pipeline import run_pipeline
 from engine.emotion_tracker import get_emotional_arc, new_session_id
+from engine.performance_analyzer import analyze_performance
+from engine.transition_engine import get_transition_path
 class MidiRequest(BaseModel):
     notes: List[int]
     emotion : str
@@ -67,9 +69,36 @@ def create_session():
     return {"session_id": new_session_id()}
 
 
+@app.post("/analyze-performance")
+async def analyze_performance_endpoint(
+    file: UploadFile = File(...),
+    target_emotion: str = "HAPPY"
+):
+    if not file.filename.endswith((".wav", ".mp3", ".ogg", ".flac", ".webm")):
+        raise HTTPException(status_code=400, detail="Unsupported file format.")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    try:
+        result = analyze_performance(tmp_path, target_emotion)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        os.remove(tmp_path)
+
+    return result
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "SYNAESTHESIA"}
+
+
+@app.get("/transition/{current_emotion}")
+def transition(current_emotion: str, target: str = "CALM"):
+    return get_transition_path(current_emotion, target)
 
 @app.post("/export-midi")
 def export_midi(req: MidiRequest):
