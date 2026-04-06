@@ -1,6 +1,10 @@
 .venv/
 __pycache__/
 *.pyc
-.DS_Store
-data/
-models/
+*.pyo
+*.pt
+*.pkl
+data/ravdess/
+data/dataset.npz
+*.DS_Store
+build_frontend.py
