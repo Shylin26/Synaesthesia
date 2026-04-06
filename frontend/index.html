@@ -9,12 +9,15 @@
   // ── Mode switching ────────────────────────────────────────────────────────
   function switchMode(mode) {
     document.getElementById('analysePanel').style.display   = mode==='analyse'   ? 'grid'  : 'none';
+    document.getElementById('memoryPanel').style.display    = mode==='memory'    ? 'block' : 'none';
     document.getElementById('therapyPanel').classList.toggle('active', mode==='therapy');
     document.getElementById('educationPanel').style.display = mode==='education' ? 'block' : 'none';
-    ['tabAnalyse','tabTherapy','tabEducation'].forEach(id => {
+    ['tabAnalyse','tabTherapy','tabEducation','tabMemory'].forEach(id => {
       document.getElementById(id).classList.remove('active');
     });
-    document.getElementById('tab'+mode.charAt(0).toUpperCase()+mode.slice(1)).classList.add('active');
+    const tabId = 'tab'+mode.charAt(0).toUpperCase()+mode.slice(1);
+    if(document.getElementById(tabId)) document.getElementById(tabId).classList.add('active');
+    if(mode==='memory') loadMemory();
   }
 
   // ── Therapy mode ──────────────────────────────────────────────────────────
@@ -196,6 +199,129 @@
     setTimeout(() => document.querySelectorAll('#eduScoresPanel .score-fill').forEach(el => el.style.width = el.dataset.v + '%'), 60);
 
     document.getElementById('eduResult').style.display = 'block';
+  }
+
+  // ── Memory / Emotion Graph ────────────────────────────────────────────────
+  async function loadMemory() {
+    if (!sessionId) {
+      document.getElementById('memoryEmpty').textContent = 'No session started yet — analyse some audio first.';
+      return;
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/session/${sessionId}`);
+      const data = await res.json();
+      renderMemory(data);
+    } catch(e) {
+      document.getElementById('memoryEmpty').textContent = 'Could not load session data.';
+    }
+  }
+
+  function renderMemory(data) {
+    if (!data.readings || !data.readings.length) {
+      document.getElementById('memoryEmpty').style.display = 'block';
+      return;
+    }
+    document.getElementById('memoryEmpty').style.display = 'none';
+
+    // stats
+    const dom = data.dominant_emotion;
+    const domHex = EC_HEX[dom] || '#fff';
+    document.getElementById('statDominant').textContent = dom || '—';
+    document.getElementById('statDominant').style.color = domHex;
+    document.getElementById('statValence').textContent = data.avg_valence > 0 ? '+'+data.avg_valence : data.avg_valence;
+    document.getElementById('statValence').style.color = data.avg_valence > 0 ? '#1db954' : '#f87171';
+    document.getElementById('statArousal').textContent = data.avg_arousal > 0 ? '+'+data.avg_arousal : data.avg_arousal;
+    document.getElementById('statArousal').style.color = data.avg_arousal > 0 ? '#fbbf24' : '#60a5fa';
+    document.getElementById('statTotal').textContent = data.total_readings;
+    document.getElementById('memoryStats').style.display = 'grid';
+
+    // graph
+    drawMemoryGraph(data.readings);
+
+    // timeline
+    const tl = document.getElementById('memoryTimeline');
+    tl.innerHTML = '';
+    data.readings.forEach((r, i) => {
+      const hex = EC_HEX[r.emotion] || '#fff';
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;align-items:center;gap:0.8rem;padding:0.5rem 0.8rem;background:rgba(255,255,255,0.02);border-radius:8px';
+      el.innerHTML = `
+        <div style="width:6px;height:6px;border-radius:50%;background:${hex};flex-shrink:0"></div>
+        <div style="font-size:0.78rem;font-weight:600;color:${hex};width:65px;flex-shrink:0">${r.emotion}</div>
+        <div style="font-size:0.7rem;color:var(--text3);flex:1">V:${r.valence} A:${r.arousal}</div>
+        <div style="font-size:0.68rem;color:var(--text3)">${r.confidence}%</div>
+        <div style="font-size:0.62rem;color:#444">${r.timestamp.slice(11,16)}</div>
+      `;
+      tl.appendChild(el);
+    });
+  }
+
+  function drawMemoryGraph(readings) {
+    const canvas = document.getElementById('memoryGraph');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.offsetWidth || 800;
+    const H = 180;
+    canvas.width = W; canvas.height = H;
+    ctx.clearRect(0, 0, W, H);
+
+    const pad = { l:40, r:20, t:20, b:30 };
+    const gW = W - pad.l - pad.r;
+    const gH = H - pad.t - pad.b;
+    const n = readings.length;
+    if (n < 1) return;
+
+    // grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    [-1, -0.5, 0, 0.5, 1].forEach(v => {
+      const y = pad.t + gH * (1 - (v + 1) / 2);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.font = '8px Inter,sans-serif';
+      ctx.fillText(v.toFixed(1), 2, y + 3);
+    });
+
+    // zero line
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    const zeroY = pad.t + gH * 0.5;
+    ctx.beginPath(); ctx.moveTo(pad.l, zeroY); ctx.lineTo(W - pad.r, zeroY); ctx.stroke();
+
+    function xPos(i) { return pad.l + (n === 1 ? gW/2 : (i / (n-1)) * gW); }
+    function yPos(v) { return pad.t + gH * (1 - (v + 1) / 2); }
+
+    // valence line
+    ctx.strokeStyle = '#1db954';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    readings.forEach((r, i) => {
+      i === 0 ? ctx.moveTo(xPos(i), yPos(r.valence)) : ctx.lineTo(xPos(i), yPos(r.valence));
+    });
+    ctx.stroke();
+
+    // arousal line
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    readings.forEach((r, i) => {
+      i === 0 ? ctx.moveTo(xPos(i), yPos(r.arousal)) : ctx.lineTo(xPos(i), yPos(r.arousal));
+    });
+    ctx.stroke();
+
+    // emotion dots
+    readings.forEach((r, i) => {
+      const hex = EC_HEX[r.emotion] || '#fff';
+      const x = xPos(i), y = yPos(r.valence);
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
+      ctx.fillStyle = hex; ctx.fill();
+    });
+
+    // legend
+    ctx.fillStyle = '#1db954'; ctx.fillRect(W-90, 8, 10, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '8px Inter,sans-serif';
+    ctx.fillText('Valence', W-76, 12);
+    ctx.fillStyle = '#fbbf24'; ctx.fillRect(W-90, 18, 10, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillText('Arousal', W-76, 22);
   }
 </script>
 <style>
@@ -450,6 +576,7 @@ footer p{font-size:0.68rem;color:var(--text3)}
     <button class="mode-tab active" id="tabAnalyse" onclick="switchMode('analyse')">Analyse</button>
     <button class="mode-tab" id="tabTherapy" onclick="switchMode('therapy')">Therapy</button>
     <button class="mode-tab" id="tabEducation" onclick="switchMode('education')">Education</button>
+    <button class="mode-tab" id="tabMemory" onclick="switchMode('memory')">Memory</button>
   </div>
 
   <!-- THERAPY MODE -->
@@ -576,6 +703,51 @@ footer p{font-size:0.68rem;color:var(--text3)}
     </div>
   </div>
 
+
+  <!-- MEMORY MODE -->
+  <div id="memoryPanel" style="display:none;padding:2.5rem;max-width:900px;margin:0 auto;width:100%">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <div>
+        <div class="therapy-q" style="margin-bottom:0.3rem">Emotional Memory</div>
+        <div style="font-size:0.72rem;color:var(--text3)">Your emotional arc across this session</div>
+      </div>
+      <button onclick="loadMemory()" style="padding:0.5rem 1rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:0.72rem;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">Refresh</button>
+    </div>
+
+    <!-- stats row -->
+    <div id="memoryStats" style="display:none;display:grid;grid-template-columns:repeat(4,1fr);gap:0.8rem;margin-bottom:1.5rem">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center">
+        <div id="statDominant" style="font-size:1.2rem;font-weight:700;margin-bottom:0.2rem">—</div>
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:0.1em">DOMINANT</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center">
+        <div id="statValence" style="font-size:1.2rem;font-weight:700;margin-bottom:0.2rem">—</div>
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:0.1em">AVG VALENCE</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center">
+        <div id="statArousal" style="font-size:1.2rem;font-weight:700;margin-bottom:0.2rem">—</div>
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:0.1em">AVG AROUSAL</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center">
+        <div id="statTotal" style="font-size:1.2rem;font-weight:700;margin-bottom:0.2rem">—</div>
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:0.1em">READINGS</div>
+      </div>
+    </div>
+
+    <!-- graph -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem">
+      <div class="panel-title">Valence &amp; Arousal Over Time</div>
+      <canvas id="memoryGraph" height="180" style="width:100%;display:block;margin-top:0.8rem"></canvas>
+    </div>
+
+    <!-- timeline -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem">
+      <div class="panel-title">Timeline</div>
+      <div id="memoryTimeline" style="display:flex;flex-direction:column;gap:0.4rem;margin-top:0.5rem"></div>
+      <div id="memoryEmpty" style="font-size:0.75rem;color:var(--text3);text-align:center;padding:1.5rem">No session data yet — analyse some audio first.</div>
+    </div>
+  </div>
   <footer>
     <p>Synaesthesia &mdash; Undergraduate Research Project</p>
     <div class="f-tags">
@@ -785,12 +957,15 @@ document.getElementById('clearHistory').addEventListener('click',()=>{
   // ── Mode switching ────────────────────────────────────────────────────────
   function switchMode(mode) {
     document.getElementById('analysePanel').style.display   = mode==='analyse'   ? 'grid'  : 'none';
+    document.getElementById('memoryPanel').style.display    = mode==='memory'    ? 'block' : 'none';
     document.getElementById('therapyPanel').classList.toggle('active', mode==='therapy');
     document.getElementById('educationPanel').style.display = mode==='education' ? 'block' : 'none';
-    ['tabAnalyse','tabTherapy','tabEducation'].forEach(id => {
+    ['tabAnalyse','tabTherapy','tabEducation','tabMemory'].forEach(id => {
       document.getElementById(id).classList.remove('active');
     });
-    document.getElementById('tab'+mode.charAt(0).toUpperCase()+mode.slice(1)).classList.add('active');
+    const tabId = 'tab'+mode.charAt(0).toUpperCase()+mode.slice(1);
+    if(document.getElementById(tabId)) document.getElementById(tabId).classList.add('active');
+    if(mode==='memory') loadMemory();
   }
 
   // ── Therapy mode ──────────────────────────────────────────────────────────
@@ -972,6 +1147,129 @@ document.getElementById('clearHistory').addEventListener('click',()=>{
     setTimeout(() => document.querySelectorAll('#eduScoresPanel .score-fill').forEach(el => el.style.width = el.dataset.v + '%'), 60);
 
     document.getElementById('eduResult').style.display = 'block';
+  }
+
+  // ── Memory / Emotion Graph ────────────────────────────────────────────────
+  async function loadMemory() {
+    if (!sessionId) {
+      document.getElementById('memoryEmpty').textContent = 'No session started yet — analyse some audio first.';
+      return;
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/session/${sessionId}`);
+      const data = await res.json();
+      renderMemory(data);
+    } catch(e) {
+      document.getElementById('memoryEmpty').textContent = 'Could not load session data.';
+    }
+  }
+
+  function renderMemory(data) {
+    if (!data.readings || !data.readings.length) {
+      document.getElementById('memoryEmpty').style.display = 'block';
+      return;
+    }
+    document.getElementById('memoryEmpty').style.display = 'none';
+
+    // stats
+    const dom = data.dominant_emotion;
+    const domHex = EC_HEX[dom] || '#fff';
+    document.getElementById('statDominant').textContent = dom || '—';
+    document.getElementById('statDominant').style.color = domHex;
+    document.getElementById('statValence').textContent = data.avg_valence > 0 ? '+'+data.avg_valence : data.avg_valence;
+    document.getElementById('statValence').style.color = data.avg_valence > 0 ? '#1db954' : '#f87171';
+    document.getElementById('statArousal').textContent = data.avg_arousal > 0 ? '+'+data.avg_arousal : data.avg_arousal;
+    document.getElementById('statArousal').style.color = data.avg_arousal > 0 ? '#fbbf24' : '#60a5fa';
+    document.getElementById('statTotal').textContent = data.total_readings;
+    document.getElementById('memoryStats').style.display = 'grid';
+
+    // graph
+    drawMemoryGraph(data.readings);
+
+    // timeline
+    const tl = document.getElementById('memoryTimeline');
+    tl.innerHTML = '';
+    data.readings.forEach((r, i) => {
+      const hex = EC_HEX[r.emotion] || '#fff';
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;align-items:center;gap:0.8rem;padding:0.5rem 0.8rem;background:rgba(255,255,255,0.02);border-radius:8px';
+      el.innerHTML = `
+        <div style="width:6px;height:6px;border-radius:50%;background:${hex};flex-shrink:0"></div>
+        <div style="font-size:0.78rem;font-weight:600;color:${hex};width:65px;flex-shrink:0">${r.emotion}</div>
+        <div style="font-size:0.7rem;color:var(--text3);flex:1">V:${r.valence} A:${r.arousal}</div>
+        <div style="font-size:0.68rem;color:var(--text3)">${r.confidence}%</div>
+        <div style="font-size:0.62rem;color:#444">${r.timestamp.slice(11,16)}</div>
+      `;
+      tl.appendChild(el);
+    });
+  }
+
+  function drawMemoryGraph(readings) {
+    const canvas = document.getElementById('memoryGraph');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.offsetWidth || 800;
+    const H = 180;
+    canvas.width = W; canvas.height = H;
+    ctx.clearRect(0, 0, W, H);
+
+    const pad = { l:40, r:20, t:20, b:30 };
+    const gW = W - pad.l - pad.r;
+    const gH = H - pad.t - pad.b;
+    const n = readings.length;
+    if (n < 1) return;
+
+    // grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    [-1, -0.5, 0, 0.5, 1].forEach(v => {
+      const y = pad.t + gH * (1 - (v + 1) / 2);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.font = '8px Inter,sans-serif';
+      ctx.fillText(v.toFixed(1), 2, y + 3);
+    });
+
+    // zero line
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    const zeroY = pad.t + gH * 0.5;
+    ctx.beginPath(); ctx.moveTo(pad.l, zeroY); ctx.lineTo(W - pad.r, zeroY); ctx.stroke();
+
+    function xPos(i) { return pad.l + (n === 1 ? gW/2 : (i / (n-1)) * gW); }
+    function yPos(v) { return pad.t + gH * (1 - (v + 1) / 2); }
+
+    // valence line
+    ctx.strokeStyle = '#1db954';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    readings.forEach((r, i) => {
+      i === 0 ? ctx.moveTo(xPos(i), yPos(r.valence)) : ctx.lineTo(xPos(i), yPos(r.valence));
+    });
+    ctx.stroke();
+
+    // arousal line
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    readings.forEach((r, i) => {
+      i === 0 ? ctx.moveTo(xPos(i), yPos(r.arousal)) : ctx.lineTo(xPos(i), yPos(r.arousal));
+    });
+    ctx.stroke();
+
+    // emotion dots
+    readings.forEach((r, i) => {
+      const hex = EC_HEX[r.emotion] || '#fff';
+      const x = xPos(i), y = yPos(r.valence);
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
+      ctx.fillStyle = hex; ctx.fill();
+    });
+
+    // legend
+    ctx.fillStyle = '#1db954'; ctx.fillRect(W-90, 8, 10, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '8px Inter,sans-serif';
+    ctx.fillText('Valence', W-76, 12);
+    ctx.fillStyle = '#fbbf24'; ctx.fillRect(W-90, 18, 10, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillText('Arousal', W-76, 22);
   }
 </script>
 </body>
