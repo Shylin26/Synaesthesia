@@ -22,8 +22,10 @@ from engine.transition_engine import get_transition_path
 from api.ws_stream import stream_emotion
 class MidiRequest(BaseModel):
     notes: List[int]
-    emotion : str
-    bpm : int=120
+    emotion: str
+    bpm: int = 120
+    bass: List[int] = []
+    inner: List[int] = []
 
 
 app = FastAPI(title="SYNAESTHESIA API")
@@ -117,18 +119,30 @@ def export_midi(req: MidiRequest):
     note_dur = spb * 0.45
 
     midi = pretty_midi.PrettyMIDI(initial_tempo=bpm)
-    instrument = pretty_midi.Instrument(program=0)
 
-    for i, pitch in enumerate(req.notes):
-        jitter = random.uniform(-0.015, 0.015)
-        sine_vel = math.sin(i * math.pi / 4)
-        velocity = int(max(40, min(127, 85 + sine_vel * 15 + random.randint(-8, 8))))
-        start = max(0.0, i * spb * 0.5 + jitter)
-        note = pretty_midi.Note(velocity=velocity, pitch=int(pitch),
-                                start=start, end=start + note_dur)
-        instrument.notes.append(note)
+    PROGRAMS = {"melody": 0, "bass": 32, "inner": 4}
+    OCTAVE_SHIFT = {"melody": 0, "bass": 0, "inner": 0}
 
-    midi.instruments.append(instrument)
+    voices = {"melody": req.notes}
+    if hasattr(req, "bass") and req.bass:
+        voices["bass"] = req.bass
+    if hasattr(req, "inner") and req.inner:
+        voices["inner"] = req.inner
+
+    for voice_name, pitches in voices.items():
+        instrument = pretty_midi.Instrument(program=PROGRAMS.get(voice_name, 0))
+        for i, pitch in enumerate(pitches):
+            jitter = random.uniform(-0.015, 0.015)
+            sine_vel = math.sin(i * math.pi / 4)
+            base_vel = 85 if voice_name == "melody" else (65 if voice_name == "inner" else 75)
+            velocity = int(max(40, min(127, base_vel + sine_vel * 12 + random.randint(-6, 6))))
+            start = max(0.0, i * spb * 0.5 + jitter)
+            dur = note_dur * (1.8 if voice_name == "bass" else 1.0)
+            note = pretty_midi.Note(velocity=velocity, pitch=int(pitch),
+                                    start=start, end=start + dur)
+            instrument.notes.append(note)
+        midi.instruments.append(instrument)
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mid") as tmp:
         midi.write(tmp.name)
         tmp_path = tmp.name

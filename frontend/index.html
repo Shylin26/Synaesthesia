@@ -522,9 +522,22 @@ function drawVA(id,emotion,hex){
 document.getElementById('play-btn').addEventListener('click',async()=>{
   if(!notes.length)return;
   await Tone.start();
-  const s=new Tone.Synth({oscillator:{type:'triangle'},envelope:{attack:.05,decay:.2,sustain:.4,release:.8}}).toDestination();
   const now=Tone.now();
-  notes.forEach((m,i)=>s.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'8n',now+i*.35));
+  const spb=60/(curBpm||120);
+  const step=spb*0.5;
+
+  const melodySynth=new Tone.Synth({oscillator:{type:'triangle'},envelope:{attack:.05,decay:.3,sustain:.5,release:1.0},volume:-6}).toDestination();
+  notes.forEach((m,i)=>melodySynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'8n',now+i*step));
+
+  if(window._curBass&&window._curBass.length){
+    const bassSynth=new Tone.Synth({oscillator:{type:'sine'},envelope:{attack:.08,decay:.4,sustain:.6,release:1.2},volume:-10}).toDestination();
+    window._curBass.forEach((m,i)=>bassSynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'4n',now+i*step));
+  }
+
+  if(window._curInner&&window._curInner.length){
+    const innerSynth=new Tone.Synth({oscillator:{type:'sine'},envelope:{attack:.1,decay:.3,sustain:.4,release:.8},volume:-14}).toDestination();
+    window._curInner.forEach((m,i)=>innerSynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'8n',now+i*step));
+  }
 });
 
 // midi

@@ -8,7 +8,7 @@ try:
 except Exception:
     USE_V2 = False
 from engine.melody_transformer import MelodyTransformer, generate_melody
-from engine.melody_composer import compose_melody
+from engine.melody_composer import compose_melody, compose_arrangement
 from engine.fingerprinter import generate_hashes
 from engine.db import recognize_audio
 from engine.emotion_tracker import setup_tracker, log_emotion, new_session_id
@@ -59,12 +59,13 @@ def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, se
     if chord_result.get("key") in ["A","E","D","G","B"]:
         root_midi = 57 + ["A","Bb","B","C","C#","D","Eb","E","F","F#","G","Ab"].index(chord_result["key"])
 
-    melody_notes = compose_melody(
+    arrangement = compose_arrangement(
         emotion=emotion_label,
         root_midi=root_midi,
         length=melody_length,
         bpm=bpm
     )
+    melody_notes = arrangement["melody"]
     result = {
         "song_match": song_match,
         "emotion": emotion_label,
@@ -74,6 +75,8 @@ def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, se
         "emotion_scores": scores,
         "bpm": bpm,
         "melody": melody_notes,
+        "bass": arrangement["bass"],
+        "inner": arrangement["inner"],
         "melody_length": len(melody_notes),
         "session_id": session_id,
         "chords": chord_result
