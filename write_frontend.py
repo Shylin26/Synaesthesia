@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+OUT = "/Users/parishachauhan/SYNAESTHESIA /SYNAESTHESIA/frontend/index.html"
+parts = []
+
+parts.append("""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -185,7 +188,9 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;ba
   </nav>
   <div class="sb-ft"><div class="pulse"></div>API LIVE</div>
 </div>
-<div id="ct">
+<div id="ct">""")
+
+parts.append("""
 <!-- ANALYSE -->
 <div id="v-analyse" class="vw on">
   <div class="vw-hd">Analyse Audio</div>
@@ -373,7 +378,9 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;ba
   </div>
 </div>
 </div>
-</div><script>
+</div>""")
+
+parts.append("""<script>
 const EC={HAPPY:'#f5c842',SAD:'#4a9eff',ANGRY:'#ff4a4a',CALM:'#42e8a0',UNCERTAIN:'#888'};
 const ECR={HAPPY:[245,200,66],SAD:[74,158,255],ANGRY:[255,74,74],CALM:[66,232,160]};
 const VA={HAPPY:[0.7,0.6],SAD:[-0.6,-0.5],ANGRY:[-0.4,0.75],CALM:[0.55,-0.6]};
@@ -742,4 +749,8 @@ function stopLive(){
 }
 </script>
 </body>
-</html>
+</html>""")
+
+with open(OUT,'w') as f:
+    f.write(''.join(parts))
+print('Written',sum(len(p) for p in parts),'chars')
