@@ -1,7 +1,12 @@
 import os,sys,torch,numpy as np,librosa
 import scipy.ndimage as ndimage
 sys.path.append(os.path.join(os.path.dirname(__file__),'..'))
-from engine.predict_emotion import predict_emotion,load_model as load_emotion_model
+from engine.predict_emotion import predict_emotion, load_model as load_emotion_model
+try:
+    from engine.predict_emotion_v2 import predict_emotion_v2
+    USE_V2 = True
+except Exception:
+    USE_V2 = False
 from engine.melody_transformer import MelodyTransformer,generate_melody
 from engine.fingerprinter import generate_hashes
 from engine.db import recognize_audio
@@ -38,7 +43,7 @@ def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, se
     peak_freqs,peak_times=np.where(local_maxima&loud_peaks)
     hashes=generate_hashes(peak_freqs,peak_times)
     song_match=recognize_audio(hashes)
-    emotion_result=predict_emotion(audio_path)
+    emotion_result = predict_emotion_v2(audio_path) if USE_V2 else predict_emotion(audio_path)
     emotion_label=emotion_result["emotion"]
     confidence=emotion_result["confidence"]
     scores=emotion_result['scores']

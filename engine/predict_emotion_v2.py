@@ -16,18 +16,18 @@ def va_to_emotion(valence, arousal):
     if v >= 0 and a < 0:   return "CALM"
     return "SAD"
 
-def lod_regressor():
-    model=EmotionRegressor()
-    model.state_dict(torch.load(MODEL_PATH,map_location='cpu'))
+def load_regressor():
+    model = EmotionRegressor()
+    model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'))
     model.eval()
-    with open(SCALER_PATH,'rb') as f:
-        scaler=pickle.load(f)
-    return model,scaler
+    with open(SCALER_PATH, 'rb') as f:
+        scaler = pickle.load(f)
+    return model, scaler
 
-def predict_emotio_v2(file_path:str)->dixt:
+def predict_emotion_v2(file_path: str) -> dict:
     model,scaler=load_regressor()
     features=extract_features_from_file(file_path)
-    features=scaler.transorm([features])
+    features = scaler.transform([features])
     tensor=torch.tensor(features,dtype=torch.float32)
 
     with torch.no_grad():
@@ -57,7 +57,7 @@ def predict_emotio_v2(file_path:str)->dixt:
 
 if __name__=="__main__":
     import librosa
-    result=predict_emotio_v2(librosa.ex('trumpet'))
+    result = predict_emotion_v2(librosa.ex('trumpet'))
     print(f"Emotion:  {result['emotion']}")
     print(f"Valence:  {result['valence']:.2f}  ({result['valence_norm']:+.3f})")
     print(f"Arousal:  {result['arousal']:.2f}  ({result['arousal_norm']:+.3f})")
