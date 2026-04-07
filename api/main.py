@@ -6,7 +6,7 @@ import pretty_midi
 from pydantic import BaseModel
 from typing import List, Optional
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -16,6 +16,7 @@ from engine.pipeline import run_pipeline
 from engine.emotion_tracker import get_emotional_arc, new_session_id
 from engine.performance_analyzer import analyze_performance
 from engine.transition_engine import get_transition_path
+from api.ws_stream import stream_emotion
 class MidiRequest(BaseModel):
     notes: List[int]
     emotion : str
@@ -94,6 +95,11 @@ async def analyze_performance_endpoint(
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "SYNAESTHESIA"}
+
+
+@app.websocket("/ws/stream")
+async def websocket_stream(websocket: WebSocket):
+    await stream_emotion(websocket)
 
 
 @app.get("/transition/{current_emotion}")

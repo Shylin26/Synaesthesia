@@ -10,13 +10,15 @@
   function switchMode(mode) {
     document.getElementById('analysePanel').style.display   = mode==='analyse'   ? 'grid'  : 'none';
     document.getElementById('memoryPanel').style.display    = mode==='memory'    ? 'block' : 'none';
+    document.getElementById('livePanel').style.display      = mode==='live'      ? 'block' : 'none';
     document.getElementById('therapyPanel').classList.toggle('active', mode==='therapy');
     document.getElementById('educationPanel').style.display = mode==='education' ? 'block' : 'none';
-    ['tabAnalyse','tabTherapy','tabEducation','tabMemory'].forEach(id => {
+    ['tabAnalyse','tabTherapy','tabEducation','tabMemory','tabLive'].forEach(id => {
       document.getElementById(id).classList.remove('active');
     });
     const tabId = 'tab'+mode.charAt(0).toUpperCase()+mode.slice(1);
     if(document.getElementById(tabId)) document.getElementById(tabId).classList.add('active');
+    if(mode!=='live') stopLiveStream();
     if(mode==='memory') loadMemory();
   }
 
@@ -322,6 +324,102 @@
     ctx.fillStyle = '#fbbf24'; ctx.fillRect(W-90, 18, 10, 3);
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.fillText('Arousal', W-76, 22);
+  }
+
+  // ── Live Stream ───────────────────────────────────────────────────────────
+  let liveWs = null, liveMr = null, liveOn = false, liveChunkTimer = null;
+
+  function toggleLiveStream() {
+    liveOn ? stopLiveStream() : startLiveStream();
+  }
+
+  async function startLiveStream() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      liveWs = new WebSocket('ws://127.0.0.1:8000/ws/stream');
+
+      liveWs.onopen = () => {
+        liveOn = true;
+        document.getElementById('liveBtn').textContent = 'Stop Live Stream';
+        document.getElementById('liveBtn').style.background = '#f87171';
+        document.getElementById('liveBtn').style.color = '#000';
+        document.getElementById('liveStatus').innerHTML = '<span class="spin"></span>Streaming...';
+        document.getElementById('liveDisplay').style.display = 'block';
+        sendChunks(stream);
+      };
+
+      liveWs.onmessage = e => {
+        const data = JSON.parse(e.data);
+        if (data.error) { document.getElementById('liveStatus').textContent = data.error; return; }
+        updateLiveDisplay(data);
+      };
+
+      liveWs.onclose = () => stopLiveStream();
+
+    } catch(e) {
+      document.getElementById('liveStatus').textContent = 'Mic access denied.';
+    }
+  }
+
+  function sendChunks(stream) {
+    liveMr = new MediaRecorder(stream);
+    let chunks = [];
+
+    liveMr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    liveMr.onstop = () => {
+      if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        blob.arrayBuffer().then(buf => liveWs.send(buf));
+      }
+      chunks = [];
+      if (liveOn) {
+        liveMr.start();
+        liveChunkTimer = setTimeout(() => liveMr.stop(), 2000);
+      }
+    };
+
+    liveMr.start();
+    liveChunkTimer = setTimeout(() => liveMr.stop(), 2000);
+  }
+
+  function stopLiveStream() {
+    liveOn = false;
+    clearTimeout(liveChunkTimer);
+    if (liveMr && liveMr.state !== 'inactive') liveMr.stop();
+    if (liveWs) liveWs.close();
+    document.getElementById('liveBtn').textContent = 'Start Live Stream';
+    document.getElementById('liveBtn').style.background = '';
+    document.getElementById('liveBtn').style.color = '';
+    document.getElementById('liveStatus').textContent = '';
+  }
+
+  function updateLiveDisplay(data) {
+    const hex = EC_HEX[data.emotion] || '#fff';
+    const rgb = EC[data.emotion] || [255,255,255];
+
+    document.getElementById('liveEmotion').textContent = data.emotion;
+    document.getElementById('liveEmotion').style.color = hex;
+    document.getElementById('liveConf').textContent = data.confidence + '% confidence';
+    document.getElementById('liveBlend').textContent = data.blend !== data.emotion ? data.blend : '';
+    document.getElementById('liveBg').style.background = `radial-gradient(ellipse 80% 60% at 50% 50%, rgba(${rgb},0.1), transparent 70%)`;
+
+    const sp = document.getElementById('liveScores');
+    sp.innerHTML = '';
+    Object.entries(data.scores).forEach(([label, val]) => {
+      const c = EC_HEX[label] || '#fff';
+      sp.innerHTML += `<div class="score-row">
+        <div class="score-name">${label}</div>
+        <div class="score-track"><div class="score-fill" style="background:${c};width:${val}%"></div></div>
+        <div class="score-val">${val}%</div>
+      </div>`;
+    });
+
+    const hist = document.getElementById('liveHistory');
+    const dot = document.createElement('div');
+    dot.title = `${data.emotion} ${data.confidence}%`;
+    dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${hex};flex-shrink:0;opacity:0.8`;
+    hist.appendChild(dot);
+    if (hist.children.length > 40) hist.removeChild(hist.firstChild);
   }
 </script>
 <style>
@@ -577,6 +675,7 @@ footer p{font-size:0.68rem;color:var(--text3)}
     <button class="mode-tab" id="tabTherapy" onclick="switchMode('therapy')">Therapy</button>
     <button class="mode-tab" id="tabEducation" onclick="switchMode('education')">Education</button>
     <button class="mode-tab" id="tabMemory" onclick="switchMode('memory')">Memory</button>
+    <button class="mode-tab" id="tabLive" onclick="switchMode('live')">Live</button>
   </div>
 
   <!-- THERAPY MODE -->
@@ -746,6 +845,43 @@ footer p{font-size:0.68rem;color:var(--text3)}
       <div class="panel-title">Timeline</div>
       <div id="memoryTimeline" style="display:flex;flex-direction:column;gap:0.4rem;margin-top:0.5rem"></div>
       <div id="memoryEmpty" style="font-size:0.75rem;color:var(--text3);text-align:center;padding:1.5rem">No session data yet — analyse some audio first.</div>
+    </div>
+  </div>
+
+  <!-- LIVE STREAM MODE -->
+  <div id="livePanel" style="display:none;padding:2.5rem;max-width:700px;margin:0 auto;width:100%">
+
+    <div style="margin-bottom:2rem">
+      <div class="therapy-q">Real-time Emotion Detection</div>
+      <div style="font-size:0.72rem;color:var(--text3);margin-bottom:1.5rem">Streams audio every 2 seconds and detects emotion live</div>
+
+      <button class="journey-btn" id="liveBtn" onclick="toggleLiveStream()" style="margin-bottom:0">Start Live Stream</button>
+      <div class="therapy-status" id="liveStatus" style="margin-top:0.8rem"></div>
+    </div>
+
+    <!-- live emotion display -->
+    <div id="liveDisplay" style="display:none">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;text-align:center;margin-bottom:1rem;position:relative;overflow:hidden">
+        <div id="liveBg" style="position:absolute;inset:0;transition:background 1s ease;pointer-events:none"></div>
+        <div style="position:relative;z-index:1">
+          <div style="font-size:0.65rem;letter-spacing:0.15em;color:var(--text3);margin-bottom:0.5rem">LIVE EMOTION</div>
+          <div id="liveEmotion" style="font-family:'Inter',sans-serif;font-size:3.5rem;font-weight:700;letter-spacing:-0.02em;transition:color .5s">—</div>
+          <div id="liveConf" style="font-size:0.8rem;color:var(--text3);margin-top:0.3rem"></div>
+          <div id="liveBlend" style="font-size:0.75rem;color:var(--text2);margin-top:0.2rem"></div>
+        </div>
+      </div>
+
+      <!-- live score bars -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem">
+        <div class="panel-title">Live Scores</div>
+        <div id="liveScores"></div>
+      </div>
+
+      <!-- live history dots -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem">
+        <div class="panel-title">Stream History</div>
+        <div id="liveHistory" style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem"></div>
+      </div>
     </div>
   </div>
   <footer>
@@ -958,13 +1094,15 @@ document.getElementById('clearHistory').addEventListener('click',()=>{
   function switchMode(mode) {
     document.getElementById('analysePanel').style.display   = mode==='analyse'   ? 'grid'  : 'none';
     document.getElementById('memoryPanel').style.display    = mode==='memory'    ? 'block' : 'none';
+    document.getElementById('livePanel').style.display      = mode==='live'      ? 'block' : 'none';
     document.getElementById('therapyPanel').classList.toggle('active', mode==='therapy');
     document.getElementById('educationPanel').style.display = mode==='education' ? 'block' : 'none';
-    ['tabAnalyse','tabTherapy','tabEducation','tabMemory'].forEach(id => {
+    ['tabAnalyse','tabTherapy','tabEducation','tabMemory','tabLive'].forEach(id => {
       document.getElementById(id).classList.remove('active');
     });
     const tabId = 'tab'+mode.charAt(0).toUpperCase()+mode.slice(1);
     if(document.getElementById(tabId)) document.getElementById(tabId).classList.add('active');
+    if(mode!=='live') stopLiveStream();
     if(mode==='memory') loadMemory();
   }
 
@@ -1270,6 +1408,102 @@ document.getElementById('clearHistory').addEventListener('click',()=>{
     ctx.fillStyle = '#fbbf24'; ctx.fillRect(W-90, 18, 10, 3);
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.fillText('Arousal', W-76, 22);
+  }
+
+  // ── Live Stream ───────────────────────────────────────────────────────────
+  let liveWs = null, liveMr = null, liveOn = false, liveChunkTimer = null;
+
+  function toggleLiveStream() {
+    liveOn ? stopLiveStream() : startLiveStream();
+  }
+
+  async function startLiveStream() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      liveWs = new WebSocket('ws://127.0.0.1:8000/ws/stream');
+
+      liveWs.onopen = () => {
+        liveOn = true;
+        document.getElementById('liveBtn').textContent = 'Stop Live Stream';
+        document.getElementById('liveBtn').style.background = '#f87171';
+        document.getElementById('liveBtn').style.color = '#000';
+        document.getElementById('liveStatus').innerHTML = '<span class="spin"></span>Streaming...';
+        document.getElementById('liveDisplay').style.display = 'block';
+        sendChunks(stream);
+      };
+
+      liveWs.onmessage = e => {
+        const data = JSON.parse(e.data);
+        if (data.error) { document.getElementById('liveStatus').textContent = data.error; return; }
+        updateLiveDisplay(data);
+      };
+
+      liveWs.onclose = () => stopLiveStream();
+
+    } catch(e) {
+      document.getElementById('liveStatus').textContent = 'Mic access denied.';
+    }
+  }
+
+  function sendChunks(stream) {
+    liveMr = new MediaRecorder(stream);
+    let chunks = [];
+
+    liveMr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    liveMr.onstop = () => {
+      if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        blob.arrayBuffer().then(buf => liveWs.send(buf));
+      }
+      chunks = [];
+      if (liveOn) {
+        liveMr.start();
+        liveChunkTimer = setTimeout(() => liveMr.stop(), 2000);
+      }
+    };
+
+    liveMr.start();
+    liveChunkTimer = setTimeout(() => liveMr.stop(), 2000);
+  }
+
+  function stopLiveStream() {
+    liveOn = false;
+    clearTimeout(liveChunkTimer);
+    if (liveMr && liveMr.state !== 'inactive') liveMr.stop();
+    if (liveWs) liveWs.close();
+    document.getElementById('liveBtn').textContent = 'Start Live Stream';
+    document.getElementById('liveBtn').style.background = '';
+    document.getElementById('liveBtn').style.color = '';
+    document.getElementById('liveStatus').textContent = '';
+  }
+
+  function updateLiveDisplay(data) {
+    const hex = EC_HEX[data.emotion] || '#fff';
+    const rgb = EC[data.emotion] || [255,255,255];
+
+    document.getElementById('liveEmotion').textContent = data.emotion;
+    document.getElementById('liveEmotion').style.color = hex;
+    document.getElementById('liveConf').textContent = data.confidence + '% confidence';
+    document.getElementById('liveBlend').textContent = data.blend !== data.emotion ? data.blend : '';
+    document.getElementById('liveBg').style.background = `radial-gradient(ellipse 80% 60% at 50% 50%, rgba(${rgb},0.1), transparent 70%)`;
+
+    const sp = document.getElementById('liveScores');
+    sp.innerHTML = '';
+    Object.entries(data.scores).forEach(([label, val]) => {
+      const c = EC_HEX[label] || '#fff';
+      sp.innerHTML += `<div class="score-row">
+        <div class="score-name">${label}</div>
+        <div class="score-track"><div class="score-fill" style="background:${c};width:${val}%"></div></div>
+        <div class="score-val">${val}%</div>
+      </div>`;
+    });
+
+    const hist = document.getElementById('liveHistory');
+    const dot = document.createElement('div');
+    dot.title = `${data.emotion} ${data.confidence}%`;
+    dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${hex};flex-shrink:0;opacity:0.8`;
+    hist.appendChild(dot);
+    if (hist.children.length > 40) hist.removeChild(hist.firstChild);
   }
 </script>
 </body>
