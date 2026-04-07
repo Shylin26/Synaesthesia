@@ -525,18 +525,79 @@ document.getElementById('play-btn').addEventListener('click',async()=>{
   const now=Tone.now();
   const spb=60/(curBpm||120);
   const step=spb*0.5;
+  const em=curEmotion||'CALM';
 
-  const melodySynth=new Tone.Synth({oscillator:{type:'triangle'},envelope:{attack:.05,decay:.3,sustain:.5,release:1.0},volume:-6}).toDestination();
-  notes.forEach((m,i)=>melodySynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'8n',now+i*step));
+  // Master effects chain
+  const reverb=new Tone.Reverb({decay:em==='CALM'?4:em==='SAD'?3:1.5,wet:em==='CALM'?0.5:0.3}).toDestination();
+  const chorus=new Tone.Chorus({frequency:1.5,delayTime:3.5,depth:0.4,wet:0.2}).connect(reverb);
+  const delay=new Tone.FeedbackDelay({delayTime:spb*0.75,feedback:em==='SAD'?0.35:0.15,wet:em==='SAD'?0.25:0.1}).connect(chorus);
 
-  if(window._curBass&&window._curBass.length){
-    const bassSynth=new Tone.Synth({oscillator:{type:'sine'},envelope:{attack:.08,decay:.4,sustain:.6,release:1.2},volume:-10}).toDestination();
-    window._curBass.forEach((m,i)=>bassSynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'4n',now+i*step));
+  // Emotion-specific melody synth
+  let melodyOsc,melodyEnv,melodyVol;
+  if(em==='SAD'){
+    melodyOsc={type:'sine'};melodyEnv={attack:.08,decay:.6,sustain:.5,release:2.5};melodyVol=-5;
+  }else if(em==='ANGRY'){
+    melodyOsc={type:'sawtooth'};melodyEnv={attack:.005,decay:.2,sustain:.4,release:.8};melodyVol=-6;
+  }else if(em==='HAPPY'){
+    melodyOsc={type:'triangle8'};melodyEnv={attack:.01,decay:.3,sustain:.3,release:1.2};melodyVol=-5;
+  }else{
+    melodyOsc={type:'sine'};melodyEnv={attack:.1,decay:.5,sustain:.6,release:3.0};melodyVol=-6;
   }
 
+  const melodySynth=new Tone.PolySynth(Tone.Synth,{oscillator:melodyOsc,envelope:melodyEnv,volume:melodyVol}).connect(delay);
+
+  // Bass synth — always sine for warmth
+  const bassSynth=new Tone.Synth({
+    oscillator:{type:'sine'},
+    envelope:{attack:.06,decay:.6,sustain:.8,release:2.5},
+    volume:-9
+  }).connect(reverb);
+
+  // Inner harmony — softer
+  const innerSynth=new Tone.PolySynth(Tone.Synth,{
+    oscillator:{type:'sine'},
+    envelope:{attack:.1,decay:.4,sustain:.5,release:1.8},
+    volume:-15
+  }).connect(chorus);
+
+  // Drums for HAPPY and ANGRY
+  if(em==='HAPPY'||em==='ANGRY'){
+    const kick=new Tone.MembraneSynth({pitchDecay:.05,octaves:6,volume:-8}).toDestination();
+    const snare=new Tone.NoiseSynth({noise:{type:'white'},envelope:{attack:.001,decay:.15,sustain:0,release:.1},volume:-14}).toDestination();
+    const hihat=new Tone.MetalSynth({frequency:400,envelope:{attack:.001,decay:.05,release:.01},harmonicity:5.1,modulationIndex:32,resonance:4000,octaves:1.5,volume:-20}).toDestination();
+    const totalSteps=notes.length;
+    for(let i=0;i<totalSteps;i++){
+      const t=now+i*step;
+      if(i%4===0)kick.triggerAttackRelease('C1','8n',t);
+      if(i%4===2)snare.triggerAttackRelease('8n',t);
+      if(i%2===0)hihat.triggerAttackRelease('32n',t);
+    }
+  }
+
+  // Melody with humanization
+  notes.forEach((m,i)=>{
+    const jitter=(Math.random()-0.5)*0.018;
+    const dur=Math.random()<0.12?'4n':Math.random()<0.05?'2n':'8n';
+    melodySynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),dur,now+i*step+jitter);
+  });
+
+  // Bass — every 2 steps, longer notes
+  if(window._curBass&&window._curBass.length){
+    window._curBass.forEach((m,i)=>{
+      if(i%2===0){
+        const jitter=(Math.random()-0.5)*0.01;
+        bassSynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'4n',now+i*step+jitter);
+      }
+    });
+  }
+
+  // Inner harmony — off-beats only
   if(window._curInner&&window._curInner.length){
-    const innerSynth=new Tone.Synth({oscillator:{type:'sine'},envelope:{attack:.1,decay:.3,sustain:.4,release:.8},volume:-14}).toDestination();
-    window._curInner.forEach((m,i)=>innerSynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'8n',now+i*step));
+    window._curInner.forEach((m,i)=>{
+      if(i%2===1){
+        innerSynth.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'8n',now+i*step+0.015);
+      }
+    });
   }
 });
 
@@ -593,10 +654,19 @@ async function doJourney(){
 }
 async function playStep(em,bpm){
   await Tone.start();
-  const PROMPTS={HAPPY:[60,64,67,72],SAD:[57,60,64,67],ANGRY:[60,61,66,67],CALM:[60,62,64,67]};
-  const s=new Tone.Synth({oscillator:{type:'triangle'},envelope:{attack:.05,decay:.2,sustain:.4,release:.8}}).toDestination();
-  const now=Tone.now(),iv=60/bpm;
-  (PROMPTS[em]||PROMPTS.CALM).forEach((m,i)=>s.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'8n',now+i*iv));
+  const spb=60/bpm;
+  const reverb=new Tone.Reverb({decay:3,wet:0.4}).toDestination();
+  const delay=new Tone.FeedbackDelay({delayTime:spb*0.5,feedback:0.2,wet:0.15}).connect(reverb);
+  const CONFIGS={
+    HAPPY:{osc:'triangle8',env:{attack:.01,decay:.3,sustain:.3,release:1.2},notes:[60,64,67,72,74,72,69,67]},
+    SAD:  {osc:'sine',     env:{attack:.08,decay:.6,sustain:.5,release:2.5},notes:[57,60,64,60,57,55,57,60]},
+    ANGRY:{osc:'sawtooth', env:{attack:.005,decay:.2,sustain:.4,release:.8},notes:[60,61,66,67,66,61,60,61]},
+    CALM: {osc:'sine',     env:{attack:.1,decay:.5,sustain:.6,release:3.0},notes:[60,62,64,67,64,62,60,62]},
+  };
+  const cfg=CONFIGS[em]||CONFIGS.CALM;
+  const s=new Tone.Synth({oscillator:{type:cfg.osc},envelope:cfg.env,volume:-5}).connect(delay);
+  const now=Tone.now();
+  cfg.notes.forEach((m,i)=>s.triggerAttackRelease(Tone.Frequency(m,'midi').toFrequency(),'8n',now+i*spb*0.5));
 }
 
 // education
