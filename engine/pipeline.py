@@ -7,7 +7,8 @@ try:
     USE_V2 = True
 except Exception:
     USE_V2 = False
-from engine.melody_transformer import MelodyTransformer,generate_melody
+from engine.melody_transformer import MelodyTransformer, generate_melody
+from engine.melody_composer import compose_melody
 from engine.fingerprinter import generate_hashes
 from engine.db import recognize_audio
 from engine.emotion_tracker import setup_tracker, log_emotion, new_session_id
@@ -50,8 +51,20 @@ def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, se
     melody_model=load_melody_model()
     emotion_id = EMOTION_IDS.get(emotion_label, 3)
     start_sequence=EMOTION_PROMPTS[emotion_label]
-    melody_notes = generate_melody(melody_model, start_sequence, emotion_id,
-                                   length=melody_length, temperature=auto_temperature)
+    chord_result = generate_chords_from_pipeline(emotion_result)
+    tension_notes = chord_result.get("tension_notes", [])
+    allowed_notes = list(set(tension_notes)) if tension_notes else None
+
+    root_midi = 60
+    if chord_result.get("key") in ["A","E","D","G","B"]:
+        root_midi = 57 + ["A","Bb","B","C","C#","D","Eb","E","F","F#","G","Ab"].index(chord_result["key"])
+
+    melody_notes = compose_melody(
+        emotion=emotion_label,
+        root_midi=root_midi,
+        length=melody_length,
+        bpm=bpm
+    )
     result = {
         "song_match": song_match,
         "emotion": emotion_label,
@@ -63,7 +76,7 @@ def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, se
         "melody": melody_notes,
         "melody_length": len(melody_notes),
         "session_id": session_id,
-        "chords": generate_chords_from_pipeline(emotion_result)
+        "chords": chord_result
     }
     if session_id:
         log_emotion(session_id, result)

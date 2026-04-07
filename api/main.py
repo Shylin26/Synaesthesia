@@ -2,7 +2,10 @@ import os
 import sys
 import shutil
 import tempfile
+import math
+import random
 import pretty_midi
+from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -108,22 +111,27 @@ def transition(current_emotion: str, target: str = "CALM"):
 
 @app.post("/export-midi")
 def export_midi(req: MidiRequest):
-    bpm = req.bpm if req.bpm != 120 else {"HAPPY": 128, "SAD": 72, "ANGRY": 145, "CALM": 88}.get(req.emotion, 120)
-    seconds_per_beat = 60.0 / bpm
-    note_duration = seconds_per_beat * 0.5
+    EMOTION_BPM = {"HAPPY": 128, "SAD": 72, "ANGRY": 145, "CALM": 88}
+    bpm = EMOTION_BPM.get(req.emotion, req.bpm)
+    spb = 60.0 / bpm
+    note_dur = spb * 0.45
+
     midi = pretty_midi.PrettyMIDI(initial_tempo=bpm)
     instrument = pretty_midi.Instrument(program=0)
+
     for i, pitch in enumerate(req.notes):
-        start = i * seconds_per_beat * 0.5
-        note = pretty_midi.Note(velocity=90, pitch=int(pitch),
-                                start=start, end=start + note_duration)
+        jitter = random.uniform(-0.015, 0.015)
+        sine_vel = math.sin(i * math.pi / 4)
+        velocity = int(max(40, min(127, 85 + sine_vel * 15 + random.randint(-8, 8))))
+        start = max(0.0, i * spb * 0.5 + jitter)
+        note = pretty_midi.Note(velocity=velocity, pitch=int(pitch),
+                                start=start, end=start + note_dur)
         instrument.notes.append(note)
+
     midi.instruments.append(instrument)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mid") as tmp:
         midi.write(tmp.name)
         tmp_path = tmp.name
-    return FileResponse(
-        tmp_path,
-        media_type="audio/midi",
-        filename=f"synaesthesia_{req.emotion.lower()}_melody.mid"
-    )
+
+    return FileResponse(tmp_path, media_type="audio/midi",
+                        filename=f"synaesthesia_{req.emotion.lower()}_melody.mid")

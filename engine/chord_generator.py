@@ -1,4 +1,6 @@
 import random
+from pathlib import Path
+
 VA_MAP = {
     "HAPPY":     (0.7,  0.6),
     "SAD":       (-0.6, -0.5),
@@ -6,6 +8,22 @@ VA_MAP = {
     "CALM":      (0.55, -0.6),
     "UNCERTAIN": (0.0,  0.0),
 }
+
+BORROWED_CHORDS = {
+    "SAD":  [[53,57,60], [56,60,63], [51,55,58]],
+    "CALM": [[53,57,60], [56,60,63]],
+}
+
+def get_borrowed_chords(emotion: str) -> list:
+    return BORROWED_CHORDS.get(emotion, [])
+
+def _get_tension_notes(emotion: str, key: str) -> list:
+    root = KEYS.index(key) if key in KEYS else 0
+    if emotion in ("SAD", "CALM"):
+        return [(root+3)%12+60, (root+8)%12+60, (root+10)%12+60]
+    if emotion == "ANGRY":
+        return [(root+6)%12+60, (root+1)%12+60]
+    return [(root+4)%12+60, (root+7)%12+60, (root+11)%12+60]
 PROGRESSIONS = {
     "HAPPY": {
         "progressions": [["I","IV","V","I"], ["I","V","vi","IV"], ["I","IV","I","V"]],
@@ -76,7 +94,9 @@ def generate_chords(emotion:str,valence: float=None,arousal:float=None,key:str=N
         "progression": chords,
         "roman_numerals": progression,
         "instruments": data["instruments"],
-        "mood_description": data["description"]
+        "mood_description": data["description"],
+        "borrowed_chords": get_borrowed_chords(emotion),
+        "tension_notes": _get_tension_notes(emotion, key)
     }
 
 def generate_chords_from_pipeline(pipeline_result:dict)->dict:
