@@ -111,6 +111,103 @@
   }
 
   function stopIso(){isoState.running=false;clearTimeout(isoState.timer);document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
+
+  // ── Audio capture & save to library ──────────────────────────────────────
+  async function renderAndSaveToLibrary(notes, bass, inner, emotion, descriptor, valence, arousal, bpm) {
+    const spb = 60 / bpm;
+    const totalDuration = notes.length * spb * 0.5 + 2.0;
+    const sr = 44100;
+    const offCtx = new OfflineAudioContext(1, Math.ceil(totalDuration * sr), sr);
+
+    const masterGain = offCtx.createGain();
+    masterGain.gain.value = 0.85;
+    masterGain.connect(offCtx.destination);
+
+    function addTone(freq, startTime, duration, vol=0.3) {
+      const osc = offCtx.createOscillator();
+      const gain = offCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(vol, startTime + 0.02);
+      gain.gain.setValueAtTime(vol, startTime + duration * 0.7);
+      gain.gain.linearRampToValueAtTime(0, startTime + duration);
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    }
+
+    function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+    notes.forEach((m, i) => addTone(midiToFreq(m), i * spb * 0.5, spb * 0.45, 0.35));
+    (bass||[]).forEach((m, i) => { if(i%2===0) addTone(midiToFreq(m), i * spb * 0.5, spb * 0.9, 0.25); });
+    (inner||[]).forEach((m, i) => { if(i%2===1) addTone(midiToFreq(m), i * spb * 0.5, spb * 0.4, 0.15); });
+
+    const rendered = await offCtx.startRendering();
+    const wavBlob = audioBufferToWav(rendered);
+
+    const fd = new FormData();
+    fd.append('file', wavBlob, 'track.wav');
+    fd.append('emotion', emotion);
+    fd.append('descriptor', descriptor || emotion.toLowerCase());
+    fd.append('valence', valence || 5);
+    fd.append('arousal', arousal || 5);
+    fd.append('bpm', bpm || 90);
+    if(sessionId) fd.append('session_id', sessionId);
+
+    const res = await fetch('http://127.0.0.1:8000/library/save-audio', {method:'POST', body:fd});
+    return await res.json();
+  }
+
+  function audioBufferToWav(buffer) {
+    const numCh = buffer.numberOfChannels;
+    const sr = buffer.sampleRate;
+    const data = buffer.getChannelData(0);
+    const len = data.length;
+    const ab = new ArrayBuffer(44 + len * 2);
+    const view = new DataView(ab);
+    function ws(off, str) { for(let i=0;i<str.length;i++) view.setUint8(off+i, str.charCodeAt(i)); }
+    function wu32(off, v) { view.setUint32(off, v, true); }
+    function wu16(off, v) { view.setUint16(off, v, true); }
+    ws(0,'RIFF'); wu32(4, 36+len*2); ws(8,'WAVE');
+    ws(12,'fmt '); wu32(16,16); wu16(20,1); wu16(22,1);
+    wu32(24,sr); wu32(28,sr*2); wu16(32,2); wu16(34,16);
+    ws(36,'data'); wu32(40, len*2);
+    let off=44;
+    for(let i=0;i<len;i++,off+=2) {
+      const s = Math.max(-1,Math.min(1,data[i]));
+      view.setInt16(off, s<0?s*0x8000:s*0x7FFF, true);
+    }
+    return new Blob([ab], {type:'audio/wav'});
+  }
+
+  async function saveCurrentToLibrary() {
+    const btn = document.getElementById('save-lib-btn');
+    btn.textContent = 'Saving...';
+    try {
+      const entry = await renderAndSaveToLibrary(
+        melodyNotes, window._curBass||[], window._curInner||[],
+        curEmotion, window._curDescriptor||curEmotion,
+        window._curValence||5, window._curArousal||5, curBpm||90
+      );
+      btn.textContent = '✓ Saved';
+      setTimeout(()=>btn.textContent='★ Save', 2000);
+    } catch(e) { btn.textContent = 'Error'; console.error(e); }
+  }
+
+  async function saveIsoStepToLibrary() {
+    if(!isoState.params) return;
+    const p = isoState.params;
+    const SCALES={major:[60,62,64,65,67,69,71,72],dorian:[60,62,63,65,67,69,70,72],minor:[60,62,63,65,67,68,70,72],phrygian:[60,61,63,65,67,68,70,72]};
+    const scale = SCALES[p.mode]||SCALES.minor;
+    const n = Math.round(8+p.note_density*8);
+    const notes = Array.from({length:n}, ()=>scale[Math.floor(Math.random()*scale.length)]);
+    try {
+      await renderAndSaveToLibrary(notes, [], [], thTgt||'CALM', p.mode+' '+p.tempo+'bpm', isoState.tgtV, isoState.tgtA, p.tempo);
+      document.getElementById('th-status').textContent = 'Step saved to library.';
+    } catch(e) { console.error(e); }
+  }
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -291,15 +388,6 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;ba
     </div>
   </nav>
   <div class="sb-ft"><div class="pulse"></div>API LIVE
-<!-- LIBRARY -->
-<div id="v-library" class="vw">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px">
-    <div class="vw-hd" style="margin-bottom:0">Music Library</div>
-    <button onclick="loadLibrary()" style="font-size:11px;color:var(--t2);padding:6px 12px;background:var(--s);border:1px solid var(--b2);border-radius:8px;cursor:pointer">Refresh</button>
-  </div>
-  <div id="lib-empty" style="font-size:12px;color:var(--t3);text-align:center;padding:3rem">No tracks yet — analyse some audio first.</div>
-  <div id="lib-grid" style="display:flex;flex-direction:column;gap:8px"></div>
-</div>
 </div>
 </div>
 <div id="ct">
@@ -370,6 +458,7 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;ba
         <div style="display:flex;gap:10px">
           <button class="btn-action prim" id="play-btn">&#9654; Play Melody</button>
           <button class="btn-action" id="midi-btn">&#8681; Download MIDI</button>
+          <button class="btn-action" id="save-lib-btn" style="display:none" onclick="saveCurrentToLibrary()">&#9733; Save</button>
         </div>
       </div>
     </div>
@@ -488,6 +577,16 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;ba
       </div>
     </div>
   </div>
+</div>
+
+<!-- LIBRARY -->
+<div id="v-library" class="vw">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px">
+    <div class="vw-hd" style="margin-bottom:0">Music Library</div>
+    <button onclick="loadLibrary()" style="font-size:11px;color:var(--t2);padding:6px 12px;background:var(--s);border:1px solid var(--b2);border-radius:8px;cursor:pointer">Refresh</button>
+  </div>
+  <div id="lib-empty" style="font-size:12px;color:var(--t3);text-align:center;padding:3rem">No tracks yet — analyse some audio first.</div>
+  <div id="lib-grid" style="display:flex;flex-direction:column;gap:8px"></div>
 </div>
 </div>
 </div><script>
@@ -966,6 +1065,103 @@ function stopLive(){
   }
 
   function stopIso(){isoState.running=false;clearTimeout(isoState.timer);document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
+
+  // ── Audio capture & save to library ──────────────────────────────────────
+  async function renderAndSaveToLibrary(notes, bass, inner, emotion, descriptor, valence, arousal, bpm) {
+    const spb = 60 / bpm;
+    const totalDuration = notes.length * spb * 0.5 + 2.0;
+    const sr = 44100;
+    const offCtx = new OfflineAudioContext(1, Math.ceil(totalDuration * sr), sr);
+
+    const masterGain = offCtx.createGain();
+    masterGain.gain.value = 0.85;
+    masterGain.connect(offCtx.destination);
+
+    function addTone(freq, startTime, duration, vol=0.3) {
+      const osc = offCtx.createOscillator();
+      const gain = offCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(vol, startTime + 0.02);
+      gain.gain.setValueAtTime(vol, startTime + duration * 0.7);
+      gain.gain.linearRampToValueAtTime(0, startTime + duration);
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    }
+
+    function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+    notes.forEach((m, i) => addTone(midiToFreq(m), i * spb * 0.5, spb * 0.45, 0.35));
+    (bass||[]).forEach((m, i) => { if(i%2===0) addTone(midiToFreq(m), i * spb * 0.5, spb * 0.9, 0.25); });
+    (inner||[]).forEach((m, i) => { if(i%2===1) addTone(midiToFreq(m), i * spb * 0.5, spb * 0.4, 0.15); });
+
+    const rendered = await offCtx.startRendering();
+    const wavBlob = audioBufferToWav(rendered);
+
+    const fd = new FormData();
+    fd.append('file', wavBlob, 'track.wav');
+    fd.append('emotion', emotion);
+    fd.append('descriptor', descriptor || emotion.toLowerCase());
+    fd.append('valence', valence || 5);
+    fd.append('arousal', arousal || 5);
+    fd.append('bpm', bpm || 90);
+    if(sessionId) fd.append('session_id', sessionId);
+
+    const res = await fetch('http://127.0.0.1:8000/library/save-audio', {method:'POST', body:fd});
+    return await res.json();
+  }
+
+  function audioBufferToWav(buffer) {
+    const numCh = buffer.numberOfChannels;
+    const sr = buffer.sampleRate;
+    const data = buffer.getChannelData(0);
+    const len = data.length;
+    const ab = new ArrayBuffer(44 + len * 2);
+    const view = new DataView(ab);
+    function ws(off, str) { for(let i=0;i<str.length;i++) view.setUint8(off+i, str.charCodeAt(i)); }
+    function wu32(off, v) { view.setUint32(off, v, true); }
+    function wu16(off, v) { view.setUint16(off, v, true); }
+    ws(0,'RIFF'); wu32(4, 36+len*2); ws(8,'WAVE');
+    ws(12,'fmt '); wu32(16,16); wu16(20,1); wu16(22,1);
+    wu32(24,sr); wu32(28,sr*2); wu16(32,2); wu16(34,16);
+    ws(36,'data'); wu32(40, len*2);
+    let off=44;
+    for(let i=0;i<len;i++,off+=2) {
+      const s = Math.max(-1,Math.min(1,data[i]));
+      view.setInt16(off, s<0?s*0x8000:s*0x7FFF, true);
+    }
+    return new Blob([ab], {type:'audio/wav'});
+  }
+
+  async function saveCurrentToLibrary() {
+    const btn = document.getElementById('save-lib-btn');
+    btn.textContent = 'Saving...';
+    try {
+      const entry = await renderAndSaveToLibrary(
+        melodyNotes, window._curBass||[], window._curInner||[],
+        curEmotion, window._curDescriptor||curEmotion,
+        window._curValence||5, window._curArousal||5, curBpm||90
+      );
+      btn.textContent = '✓ Saved';
+      setTimeout(()=>btn.textContent='★ Save', 2000);
+    } catch(e) { btn.textContent = 'Error'; console.error(e); }
+  }
+
+  async function saveIsoStepToLibrary() {
+    if(!isoState.params) return;
+    const p = isoState.params;
+    const SCALES={major:[60,62,64,65,67,69,71,72],dorian:[60,62,63,65,67,69,70,72],minor:[60,62,63,65,67,68,70,72],phrygian:[60,61,63,65,67,68,70,72]};
+    const scale = SCALES[p.mode]||SCALES.minor;
+    const n = Math.round(8+p.note_density*8);
+    const notes = Array.from({length:n}, ()=>scale[Math.floor(Math.random()*scale.length)]);
+    try {
+      await renderAndSaveToLibrary(notes, [], [], thTgt||'CALM', p.mode+' '+p.tempo+'bpm', isoState.tgtV, isoState.tgtA, p.tempo);
+      document.getElementById('th-status').textContent = 'Step saved to library.';
+    } catch(e) { console.error(e); }
+  }
 </script>
 </body>
 </html>

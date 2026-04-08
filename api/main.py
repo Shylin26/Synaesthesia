@@ -106,6 +106,63 @@ def play_track(track_id: str):
                         filename=f"synaesthesia_{track_id}.wav")
 
 
+@app.post("/library/save-audio")
+async def save_audio_to_library(
+    file: UploadFile = File(...),
+    emotion: str = "CALM",
+    descriptor: str = "calm",
+    valence: float = 5.0,
+    arousal: float = 5.0,
+    bpm: float = 90.0,
+    session_id: str = None,
+    source: str = "analyse"
+):
+    from engine.music_library import LIBRARY_DIR, _load_index, _save_index
+    import uuid
+    from datetime import datetime
+    import soundfile as sf
+    import numpy as np
+
+    track_id = str(uuid.uuid4())[:8]
+    filename = f"{track_id}_{emotion.lower()}_{descriptor.replace(' ','_')[:20]}.wav"
+    filepath = LIBRARY_DIR / filename
+
+    audio_bytes = await file.read()
+    with open(str(filepath), 'wb') as f:
+        f.write(audio_bytes)
+
+    try:
+        data, sr = sf.read(str(filepath))
+        duration = round(len(data) / sr, 1)
+    except Exception:
+        duration = 0.0
+
+    entry = {
+        "id": track_id,
+        "filename": filename,
+        "emotion": emotion,
+        "descriptor": descriptor,
+        "valence": round(valence, 2),
+        "arousal": round(arousal, 2),
+        "bpm": round(bpm, 1),
+        "session_id": session_id,
+        "source": source,
+        "created_at": datetime.utcnow().isoformat(),
+        "duration": duration,
+    }
+
+    index = _load_index()
+    index.insert(0, entry)
+    if len(index) > 100:
+        old = index.pop()
+        old_path = LIBRARY_DIR / old["filename"]
+        if old_path.exists():
+            old_path.unlink()
+    _save_index(index)
+
+    return entry
+
+
 @app.post("/analyze-performance")
 async def analyze_performance_endpoint(
     file: UploadFile = File(...),
