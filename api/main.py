@@ -19,6 +19,7 @@ from engine.pipeline import run_pipeline
 from engine.emotion_tracker import get_emotional_arc, new_session_id
 from engine.performance_analyzer import analyze_performance
 from engine.transition_engine import get_transition_path
+from engine.audio_generator import generate_audio
 from api.ws_stream import stream_emotion
 class MidiRequest(BaseModel):
     notes: List[int]
@@ -27,6 +28,21 @@ class MidiRequest(BaseModel):
     bass: List[int] = []
     inner: List[int] = []
 
+class IsoRequest(BaseModel):
+    current_valence: float
+    current_arousal: float
+    target_valence: float
+    target_arousal: float
+    step: int = 0
+    total_steps: int = 10
+
+class MusicFeedback(BaseModel):
+    session_id: str
+    mp: dict
+    start_v: float
+    start_a: float
+    end_v: float
+    end_a: float
 
 app = FastAPI(title="SYNAESTHESIA API")
 
@@ -110,6 +126,123 @@ async def websocket_stream(websocket: WebSocket):
 @app.get("/transition/{current_emotion}")
 def transition(current_emotion: str, target: str = "CALM"):
     return get_transition_path(current_emotion, target)
+
+
+@app.post("/iso-step")
+def iso_step(req: IsoRequest):
+    progress = req.step / max(req.total_steps, 1)
+    v = req.current_valence + (req.target_valence - req.current_valence) * progress
+    a = req.current_arousal + (req.target_arousal - req.current_arousal) * progress
+    tempo = int(max(50, min(180, 80 + a * 60)))
+    if v >= 0.3:   mode = "major"
+    elif v >= -0.1: mode = "dorian"
+    elif v >= -0.5: mode = "minor"
+    else:           mode = "phrygian"
+    reverb_wet = round(max(0.05, min(0.6, 0.15 + (-a) * 0.3)), 2)
+    note_density = round(max(0.1, min(0.9, 0.3 + a * 0.4)), 2)
+    return {
+        "step": req.step,
+        "progress": round(progress, 3),
+        "current_v": round(v, 3),
+        "current_a": round(a, 3),
+        "tempo": tempo,
+        "mode": mode,
+        "reverb_wet": reverb_wet,
+        "note_density": note_density,
+        "description": f"Step {req.step}/{req.total_steps} — {mode} at {tempo} BPM"
+    }
+
+
+@app.post("/generate-audio")
+async def generate_audio_endpoint(
+    file: UploadFile = File(...),
+    duration: float = 8.0
+):
+    if not file.filename.endswith((".wav", ".mp3", ".ogg", ".flac", ".webm")):
+        raise HTTPException(status_code=400, detail="Unsupported file format.")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    try:
+        from engine.predict_emotion_v2 import predict_emotion_v2
+        emotion_result = predict_emotion_v2(tmp_path)
+        descriptor = emotion_result.get("descriptor", "neutral")
+        musical_params = emotion_result.get("musical_params")
+        audio_path = generate_audio(descriptor, duration=duration, musical_params=musical_params)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        os.remove(tmp_path)
+
+    return FileResponse(audio_path, media_type="audio/wav",
+                        filename=f"synaesthesia_generated.wav")
+
+@app.get("/compose/{emotion}")
+def compose_endpoint(emotion: str, bpm: float = 120.0):
+    from engine.melody_composer import compose_arrangement
+    from engine.predict_emotion_v2 import va_to_musical_params, EMOTION_DESCRIPTORS
+    
+    # Route 1: Derive Emotion Profile
+    matched = None
+    for d in EMOTION_DESCRIPTORS:
+        if d[2].replace(" ", "") == emotion.lower().replace(" ", ""):
+            matched = d
+            break
+            
+    if matched:
+        mp = va_to_musical_params(matched[0], matched[1])
+    else:
+        mp = va_to_musical_params(0, 0)
+        
+    # Route 2: Generate Algorithmic Baseline Foundation (Bass/Inner Harmony)
+    arrangement = compose_arrangement(emotion.upper(), 60, 20, bpm, musical_params=mp)
+    
+    # Route 3: NEURAL COMPOSER OVERRIDE (The Masterpiece Sequence)
+    # If the user has trained and generated 'melody_lstm.pt', we override the melody with pure AI.
+    model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'melody_lstm.pt')
+    if os.path.exists(model_path):
+        import torch
+        try:
+            from engine.melody_lstm import EmotionConditionedLSTM, generate_conditional_melody
+            model = EmotionConditionedLSTM(vocab_size=128, emotion_dim=4)
+            model.load_state_dict(torch.load(model_path, map_location='cpu'))
+            
+            emotion_vector = torch.tensor([[mp["syncopation"], mp["dissonance"], mp["arpeggiation"], mp["groove"]]], dtype=torch.float32)
+            start_seq = torch.tensor([[60, 62, 64, 65]]) # Base C-major scale prompt, but network will deviate 
+            
+            neural_melody = generate_conditional_melody(model, start_seq, emotion_vector, length=16, temperature=1.1)
+            arrangement["melody"] = neural_melody
+        except Exception as e:
+            print("Neural Network Override Failed - Falling back to math logic:", e)
+
+    return {
+        "melody": arrangement["melody"],
+        "bass": arrangement["bass"],
+        "inner": arrangement["inner"],
+        "musical_params": mp
+    }
+
+@app.post("/feedback/music")
+def collect_music_feedback(payload: MusicFeedback):
+    from engine.emotion_tracker import log_music_feedback
+    log_music_feedback(
+        session_id=payload.session_id,
+        mp=payload.mp,
+        start_v=payload.start_v,
+        start_a=payload.start_a,
+        end_v=payload.end_v,
+        end_a=payload.end_a
+    )
+    return {"status": "success", "message": "Feedback loop closed."}
+
+@app.get("/therapist/narrative/{session_id}")
+def therapist_narrative(session_id: str):
+    from engine.therapist import generate_session_narrative
+    narrative = generate_session_narrative(session_id)
+    return {"narrative": narrative}
+
 
 @app.post("/export-midi")
 def export_midi(req: MidiRequest):

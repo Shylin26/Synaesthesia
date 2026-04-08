@@ -11,20 +11,21 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__),'..','models','emotion_regre
 SCALER_PATH = os.path.join(os.path.dirname(__file__),'..','models','deam_scaler.pkl')
 
 EMOTION_DESCRIPTORS = [
-    (0.7, 0.7, "euphoric"),
-    (0.6, 0.4, "happy"),
-    (0.4, 0.2, "content"),
-    (0.2, -0.3, "peaceful"),
-    (0.5, -0.5, "calm"),
-    (0.1, -0.6, "serene"),
-    (-0.1, -0.4, "melancholic"),
-    (-0.4, -0.5, "sad"),
-    (-0.6, -0.3, "depressed"),
+    (0.8, 0.8, "euphoric pop"),
+    (0.7, 0.6, "neon nostalgia"),
+    (0.5, 0.4, "happy"),
+    (0.2, 0.2, "content"),
+    (0.1, -0.3, "peaceful"),
+    (0.4, -0.5, "dreamy"),
+    (0.1, -0.8, "serene"),
+    (-0.2, -0.5, "melancholic"),
+    (-0.4, -0.6, "sad"),
+    (-0.7, -0.4, "depressed"),
     (-0.3, 0.3, "anxious"),
-    (-0.5, 0.6, "angry"),
-    (-0.7, 0.8, "furious"),
+    (-0.6, 0.5, "angst"),
+    (-0.5, -0.1, "existential dread"),
+    (-0.8, 0.8, "furious"),
     (0.0, 0.5, "excited"),
-    (0.3, 0.6, "energetic"),
     (-0.2, 0.1, "tense"),
     (0.0, 0.0, "neutral"),
 ]
@@ -46,29 +47,42 @@ def va_to_musical_params(v_norm: float, a_norm: float) -> dict:
     tempo = max(50, min(180, tempo))
     note_density = round(0.5 + a_norm * 0.4, 2)
     note_density = max(0.1, min(0.9, note_density))
-    if v_norm >= 0.3:
-        mode = "major"
-    elif v_norm >= -0.1:
-        mode = "dorian"
-    elif v_norm >= -0.5:
+    
+    if v_norm >= 0.4:
+        mode = "major" if a_norm < 0.5 else "mixolydian"
+    elif v_norm >= 0.0:
+        mode = "dorian" if a_norm < 0.4 else "lydian"
+    elif v_norm >= -0.4:
         mode = "minor"
     else:
-        mode = "phrygian"
-    reverb_wet = round(0.2 + (-a_norm) * 0.3, 2)
-    reverb_wet = max(0.1, min(0.6, reverb_wet))
-    leap_prob = round(0.1 + abs(a_norm) * 0.4, 2)
-    leap_prob = max(0.05, min(0.6, leap_prob))
+        mode = "phrygian" if a_norm < 0.4 else "harmonic_minor"
+        
+    reverb_wet = round(0.3 + (-v_norm) * 0.4, 2)
+    reverb_wet = max(0.1, min(0.8, reverb_wet))
+    
+    leap_prob = round(0.1 + abs(a_norm) * 0.5, 2)
+    leap_prob = max(0.05, min(0.7, leap_prob))
+
+    groove = round(max(0.1, a_norm * 0.8 + v_norm * 0.2 + 0.3), 2)
+    syncopation = round(max(0.1, abs(v_norm)*0.5 + a_norm*0.5), 2)
+    dissonance = round(max(0.0, -v_norm * 0.7 + a_norm * 0.3), 2)
+    arpeggiation = round(max(0.1, 0.6 - abs(a_norm) * 0.4), 2)
+
     return {
         "tempo": tempo,
         "mode": mode,
         "note_density": note_density,
         "reverb_wet": reverb_wet,
         "leap_prob": leap_prob,
+        "groove": min(1.0, groove),
+        "syncopation": min(1.0, syncopation),
+        "dissonance": min(1.0, dissonance),
+        "arpeggiation": min(1.0, arpeggiation)
     }
 
 def load_regressor():
-    model = EmotionRegressor()
-    model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'))
+    model = EmotionRegressor(feature_dim=128, d_model=64, nhead=4, num_layers=2)
+    model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'), strict=False)
     model.eval()
     with open(SCALER_PATH, 'rb') as f:
         scaler = pickle.load(f)
@@ -77,6 +91,8 @@ def load_regressor():
 def predict_emotion_v2(file_path: str) -> dict:
     model, scaler = load_regressor()
     features = extract_features_from_file(file_path)
+    if len(features) > 128:
+        features = features[:128]
     features = scaler.transform([features])
     tensor = torch.tensor(features, dtype=torch.float32)
 

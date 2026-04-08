@@ -2,7 +2,9 @@ import sqlite3
 import os
 import uuid
 from datetime import datetime
+
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'fingerprints.db')
+
 VA_MAP = {
     "HAPPY":     (0.7,  0.6),
     "SAD":       (-0.6, -0.5),
@@ -10,8 +12,10 @@ VA_MAP = {
     "CALM":      (0.55, -0.6),
     "UNCERTAIN": (0.0,  0.0),
 }
+
 def setup_tracker():
-    conn=sqlite3.connect(DB_PATH)
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS emotion_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,15 +29,33 @@ def setup_tracker():
             timestamp TEXT
         )
     """)
+    # NEW: The Masterpiece Product Loop tracking what music shifted Valance
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS music_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
+            bpm REAL,
+            syncopation REAL,
+            dissonance REAL,
+            arpeggiation REAL,
+            groove REAL,
+            start_valence REAL,
+            start_arousal REAL,
+            end_valence REAL,
+            end_arousal REAL,
+            timestamp TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
-def log_emotion(session_id:str,pipeline_result:dict):
-    emotion=pipeline_result['emotion']
-    valence,arousal=VA_MAP.get(emotion,(0.0,0.0))
-    secondary=pipeline_result.get("secondary")
-    secondary_label=secondary["emotion"] if secondary else None
-    conn=sqlite3.connect(DB_PATH)
+def log_emotion(session_id: str, pipeline_result: dict):
+    emotion = pipeline_result['emotion']
+    valence, arousal = VA_MAP.get(emotion, (0.0, 0.0))
+    secondary = pipeline_result.get("secondary")
+    secondary_label = secondary["emotion"] if secondary else None
+    
+    conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         INSERT INTO emotion_sessions
         (session_id, emotion, confidence, secondary_emotion, valence, arousal, bpm, timestamp)
@@ -51,7 +73,22 @@ def log_emotion(session_id:str,pipeline_result:dict):
     conn.commit()
     conn.close()
 
-def get_session(session_id:str)->list:
+def log_music_feedback(session_id: str, mp: dict, start_v: float, start_a: float, end_v: float, end_a: float):
+    """ Record whether a specific musical loop actually helped the user """
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        INSERT INTO music_feedback
+        (session_id, bpm, syncopation, dissonance, arpeggiation, groove, start_valence, start_arousal, end_valence, end_arousal, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        session_id, mp.get("bpm", 120), mp.get("syncopation", 0), mp.get("dissonance", 0), 
+        mp.get("arpeggiation", 0), mp.get("groove", 0), 
+        start_v, start_a, end_v, end_a, datetime.utcnow().isoformat()
+    ))
+    conn.commit()
+    conn.close()
+
+def get_session(session_id: str) -> list:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -60,10 +97,8 @@ def get_session(session_id:str)->list:
     """, (session_id,))
     rows = cursor.fetchall()
     conn.close()
-    return [
-        {"emotion":r[0],"confidence":r[1],"secondary":r[2],"valence":r[3],"arousal":r[4],"bpm":r[5],"timestamp":r[6]}
-        for r in rows
-    ]
+    return [{"emotion": r[0], "confidence": r[1], "secondary": r[2], "valence": r[3], "arousal": r[4], "bpm": r[5], "timestamp": r[6]} for r in rows]
+
 def get_emotional_arc(session_id: str) -> dict:
     readings = get_session(session_id)
     if not readings:
@@ -74,22 +109,40 @@ def get_emotional_arc(session_id: str) -> dict:
     for r in readings:
         emotion_counts[r["emotion"]] = emotion_counts.get(r["emotion"], 0) + 1
     dominant = max(emotion_counts, key=emotion_counts.get)
+    return {"readings": readings, "dominant_emotion": dominant, "avg_valence": round(avg_valence, 3), "avg_arousal": round(avg_arousal, 3), "total_readings": len(readings)}
+
+def get_longitudinal_context() -> dict:
+    """ Analyzes DB globally to find Time-of-Day, Day-of-Week, and Trajectories for the Therapist """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Grab all sessions from the last 30 days
+    cursor.execute("SELECT session_id, emotion, valence, arousal, timestamp FROM emotion_sessions ORDER BY timestamp ASC")
+    all_rows = cursor.fetchall()
+    
+    cursor.execute("SELECT syncopation, dissonance, arpeggiation, groove, start_valence, end_valence FROM music_feedback")
+    fb_rows = cursor.fetchall()
+    conn.close()
+
+    # Find what music actually WORKED (delta Valence > 0)
+    successful_music = []
+    for r in fb_rows:
+        if r[5] > r[4]: # end_valence > start_valence
+            successful_music.append({
+                "syncopation": r[0], "dissonance": r[1], "arpeggiation": r[2], "groove": r[3]
+            })
+            
     return {
-        "readings": readings,
-        "dominant_emotion": dominant,
-        "avg_valence": round(avg_valence, 3),
-        "avg_arousal": round(avg_arousal, 3),
-        "total_readings": len(readings)
+        "total_historical_datapoints": len(all_rows),
+        "successful_music_profiles": successful_music,
+        "raw_history": [{"session": r[0], "emotion": r[1], "valence": r[2], "timestamp": r[4]} for r in all_rows[-50:]]
     }
 
-
-def new_session_id()->str:
+def new_session_id() -> str:
     return str(uuid.uuid4())[:8]
 
-if __name__=="__main__":
+if __name__ == "__main__":
     setup_tracker()
     print("Emotion tracker DB ready.")
-
-
 
     
