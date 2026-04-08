@@ -456,9 +456,9 @@ function renderResult(d){
   const hex=EC[d.emotion]||'#fff';
   const rgb=ECR[d.emotion]||[255,255,255];
   document.getElementById('np-bg').style.background=`linear-gradient(135deg,rgba(${rgb},0.15) 0%,transparent 60%)`;
-  document.getElementById('np-em').textContent=d.blend||d.emotion;
+  document.getElementById('np-em').textContent=d.descriptor||d.blend||d.emotion;
   document.getElementById('np-em').style.color=hex;
-  document.getElementById('np-conf').textContent=d.confidence+'% confidence · '+Math.round(d.bpm||0)+' BPM';
+  document.getElementById('np-conf').textContent=(d.confidence?d.confidence+'% · ':'')+'V:'+((d.valence||5).toFixed(1))+' A:'+((d.arousal||5).toFixed(1))+' · '+(d.musical_params?d.musical_params.mode+' · ':'')+Math.round(d.bpm||0)+' BPM';
   document.getElementById('np-song').textContent=d.song_match;
   // scores
   const sp=document.getElementById('an-scores');sp.innerHTML='';

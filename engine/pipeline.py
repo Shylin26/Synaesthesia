@@ -63,13 +63,18 @@ def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, se
         emotion=emotion_label,
         root_midi=root_midi,
         length=melody_length,
-        bpm=bpm
+        bpm=bpm,
+        musical_params=emotion_result.get("musical_params")
     )
     melody_notes = arrangement["melody"]
     result = {
         "song_match": song_match,
         "emotion": emotion_label,
-        "confidence": confidence,
+        "descriptor": emotion_result.get("descriptor", emotion_label),
+        "confidence": emotion_result.get("confidence"),
+        "valence": emotion_result.get("valence"),
+        "arousal": emotion_result.get("arousal"),
+        "musical_params": emotion_result.get("musical_params"),
         "secondary": emotion_result.get("secondary"),
         "blend": emotion_result.get("blend", emotion_label),
         "emotion_scores": scores,

@@ -115,8 +115,19 @@ def compose_melody(emotion: str, root_midi: int = 60, length: int = 20, bpm: flo
     melody_start = int(len(scale) * 0.6)
     return _compose_melody_voice(scale, length, params, start_idx=melody_start)
 
-def compose_arrangement(emotion: str, root_midi: int = 60, length: int = 20, bpm: float = 120.0) -> dict:
-    params = EMOTION_PARAMS.get(emotion, EMOTION_PARAMS["CALM"])
+def compose_arrangement(emotion: str, root_midi: int = 60, length: int = 20, bpm: float = 120.0,
+                        musical_params: dict = None) -> dict:
+    if musical_params:
+        mode = musical_params.get("mode", "minor")
+        leap_prob = musical_params.get("leap_prob", 0.2)
+        note_density = musical_params.get("note_density", 0.5)
+        rest_prob = max(0.02, 0.3 - note_density * 0.3)
+        direction_map = {"major": 0.5, "dorian": 0.1, "minor": -0.4, "phrygian": -0.7}
+        direction = direction_map.get(mode, 0.0)
+        params = {"mode": mode, "leap_prob": leap_prob, "rest_prob": rest_prob,
+                  "direction": direction, "tension": max(0.05, 0.5 - note_density)}
+    else:
+        params = EMOTION_PARAMS.get(emotion, EMOTION_PARAMS["CALM"])
     scale = _build_scale(root_midi, params["mode"])
     if not scale:
         scale = _build_scale(60, "major")
