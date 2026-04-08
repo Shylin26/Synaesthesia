@@ -20,6 +20,7 @@ from engine.emotion_tracker import get_emotional_arc, new_session_id
 from engine.performance_analyzer import analyze_performance
 from engine.transition_engine import get_transition_path
 from engine.audio_generator import generate_audio
+from engine.music_library import get_library, get_track_path
 from api.ws_stream import stream_emotion
 class MidiRequest(BaseModel):
     notes: List[int]
@@ -89,6 +90,20 @@ def get_session(session_id: str):
 @app.get("/session/new")
 def create_session():
     return {"session_id": new_session_id()}
+
+
+@app.get("/library")
+def library():
+    return get_library()
+
+
+@app.get("/library/{track_id}/play")
+def play_track(track_id: str):
+    path = get_track_path(track_id)
+    if not path or not path.exists():
+        raise HTTPException(status_code=404, detail="Track not found")
+    return FileResponse(str(path), media_type="audio/wav",
+                        filename=f"synaesthesia_{track_id}.wav")
 
 
 @app.post("/analyze-performance")

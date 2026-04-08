@@ -212,6 +212,55 @@
   document.querySelector('.ni[data-view="therapy"]').addEventListener('click', () => {
     setTimeout(drawIsoVA, 50);
   });
+
+  // ── Music Library ─────────────────────────────────────────────────────────
+  let libAudio = null;
+
+  async function loadLibrary() {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/library');
+      const tracks = await res.json();
+      renderLibrary(tracks);
+    } catch(e) {
+      document.getElementById('lib-empty').textContent = 'Could not load library.';
+    }
+  }
+
+  function renderLibrary(tracks) {
+    const grid = document.getElementById('lib-grid');
+    const empty = document.getElementById('lib-empty');
+    grid.innerHTML = '';
+    if (!tracks.length) { empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+
+    tracks.forEach(t => {
+      const hex = EC[t.emotion] || '#fff';
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--s);border:1px solid var(--b);border-radius:var(--r);transition:background .15s';
+      el.onmouseover = () => el.style.background = '#111';
+      el.onmouseout = () => el.style.background = 'var(--s)';
+      el.innerHTML = `
+        <div style="width:36px;height:36px;border-radius:8px;background:${hex}18;border:1px solid ${hex}44;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">&#9836;</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:${hex};margin-bottom:2px">${t.descriptor || t.emotion}</div>
+          <div style="font-size:11px;color:var(--t3)">V:${t.valence} A:${t.arousal} · ${t.bpm} BPM · ${t.duration}s · ${t.created_at.slice(0,10)}</div>
+        </div>
+        <button onclick="playLibraryTrack('${t.id}')" style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;cursor:pointer;transition:all .15s;flex-shrink:0" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='transparent'">&#9654; Play</button>
+        <a href="http://127.0.0.1:8000/library/${t.id}/play" download style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;text-decoration:none;transition:all .15s;flex-shrink:0" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='transparent'">&#8681;</a>
+      `;
+      grid.appendChild(el);
+    });
+  }
+
+  async function playLibraryTrack(trackId) {
+    if (libAudio) { libAudio.pause(); libAudio = null; }
+    libAudio = new Audio(`http://127.0.0.1:8000/library/${trackId}/play`);
+    libAudio.play();
+  }
+
+  document.querySelector('.ni[data-view="library"]').addEventListener('click', () => {
+    loadLibrary();
+  });
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -386,11 +435,22 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;ba
     <div class="ni" data-view="memory" onclick="show('memory')">
       <span class="ni-ic">◷</span><span class="ni-lb">Memory</span>
     </div>
+    <div class="ni" data-view="library" onclick="show('library')"><span class="ni-ic">&#9836;</span><span class="ni-lb">Library</span></div>
     <div class="ni" data-view="live" onclick="show('live')">
       <span class="ni-ic">●</span><span class="ni-lb">Live</span>
     </div>
   </nav>
-  <div class="sb-ft"><div class="pulse"></div>API LIVE</div>
+  <div class="sb-ft"><div class="pulse"></div>API LIVE
+<!-- LIBRARY -->
+<div id="v-library" class="vw">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px">
+    <div class="vw-hd" style="margin-bottom:0">Music Library</div>
+    <button onclick="loadLibrary()" style="font-size:11px;color:var(--t2);padding:6px 12px;background:var(--s);border:1px solid var(--b2);border-radius:8px;transition:all .15s" onmouseover="this.style.background='#111'" onmouseout="this.style.background='var(--s)'">Refresh</button>
+  </div>
+  <div id="lib-empty" style="font-size:12px;color:var(--t3);text-align:center;padding:3rem">No tracks yet — analyse some audio to generate music.</div>
+  <div id="lib-grid" style="display:flex;flex-direction:column;gap:8px"></div>
+</div>
+</div>
 </div>
 <div id="ct">
 <!-- ANALYSE -->
@@ -1382,6 +1442,55 @@ function stopLive(){
   // Draw empty VA on therapy tab open
   document.querySelector('.ni[data-view="therapy"]').addEventListener('click', () => {
     setTimeout(drawIsoVA, 50);
+  });
+
+  // ── Music Library ─────────────────────────────────────────────────────────
+  let libAudio = null;
+
+  async function loadLibrary() {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/library');
+      const tracks = await res.json();
+      renderLibrary(tracks);
+    } catch(e) {
+      document.getElementById('lib-empty').textContent = 'Could not load library.';
+    }
+  }
+
+  function renderLibrary(tracks) {
+    const grid = document.getElementById('lib-grid');
+    const empty = document.getElementById('lib-empty');
+    grid.innerHTML = '';
+    if (!tracks.length) { empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+
+    tracks.forEach(t => {
+      const hex = EC[t.emotion] || '#fff';
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--s);border:1px solid var(--b);border-radius:var(--r);transition:background .15s';
+      el.onmouseover = () => el.style.background = '#111';
+      el.onmouseout = () => el.style.background = 'var(--s)';
+      el.innerHTML = `
+        <div style="width:36px;height:36px;border-radius:8px;background:${hex}18;border:1px solid ${hex}44;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">&#9836;</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:${hex};margin-bottom:2px">${t.descriptor || t.emotion}</div>
+          <div style="font-size:11px;color:var(--t3)">V:${t.valence} A:${t.arousal} · ${t.bpm} BPM · ${t.duration}s · ${t.created_at.slice(0,10)}</div>
+        </div>
+        <button onclick="playLibraryTrack('${t.id}')" style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;cursor:pointer;transition:all .15s;flex-shrink:0" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='transparent'">&#9654; Play</button>
+        <a href="http://127.0.0.1:8000/library/${t.id}/play" download style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;text-decoration:none;transition:all .15s;flex-shrink:0" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='transparent'">&#8681;</a>
+      `;
+      grid.appendChild(el);
+    });
+  }
+
+  async function playLibraryTrack(trackId) {
+    if (libAudio) { libAudio.pause(); libAudio = null; }
+    libAudio = new Audio(`http://127.0.0.1:8000/library/${trackId}/play`);
+    libAudio.play();
+  }
+
+  document.querySelector('.ni[data-view="library"]').addEventListener('click', () => {
+    loadLibrary();
   });
 </script>
 </body>

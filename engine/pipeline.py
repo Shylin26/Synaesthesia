@@ -13,6 +13,7 @@ from engine.fingerprinter import generate_hashes
 from engine.db import recognize_audio
 from engine.emotion_tracker import setup_tracker, log_emotion, new_session_id
 from engine.chord_generator import generate_chords_from_pipeline
+from engine.music_library import save_melody_to_library
 
 setup_tracker()
 
@@ -88,6 +89,19 @@ def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, se
     }
     if session_id:
         log_emotion(session_id, result)
+
+    library_entry = save_melody_to_library(
+        notes=melody_notes,
+        bass=arrangement["bass"],
+        inner=arrangement["inner"],
+        emotion=emotion_label,
+        descriptor=emotion_result.get("descriptor", emotion_label),
+        valence=emotion_result.get("valence", 5.0),
+        arousal=emotion_result.get("arousal", 5.0),
+        bpm=bpm,
+        session_id=session_id,
+    )
+    result["track_id"] = library_entry["id"]
     return result
    
 if __name__ == "__main__":
