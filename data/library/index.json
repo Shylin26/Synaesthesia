@@ -1,5 +1,17 @@
 [
   {
+    "id": "89383e65",
+    "filename": "89383e65_sad_melancholic.wav",
+    "emotion": "SAD",
+    "descriptor": "melancholic",
+    "valence": 3.83,
+    "arousal": 3.58,
+    "bpm": 78.3,
+    "session_id": "8mc3uz9c",
+    "created_at": "2026-04-08T17:27:05.727520",
+    "duration": 7.7
+  },
+  {
     "id": "498ab336",
     "filename": "498ab336_happy_content.wav",
     "emotion": "HAPPY",

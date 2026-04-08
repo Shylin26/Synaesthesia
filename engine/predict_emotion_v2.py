@@ -81,7 +81,7 @@ def va_to_musical_params(v_norm: float, a_norm: float) -> dict:
     }
 
 def load_regressor():
-    model = EmotionRegressor(feature_dim=128, d_model=64, nhead=4, num_layers=2)
+    model = EmotionRegressor(feature_dim=176, d_model=64, nhead=4, num_layers=2)
     model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'), strict=False)
     model.eval()
     with open(SCALER_PATH, 'rb') as f:
@@ -91,8 +91,6 @@ def load_regressor():
 def predict_emotion_v2(file_path: str) -> dict:
     model, scaler = load_regressor()
     features = extract_features_from_file(file_path)
-    if len(features) > 128:
-        features = features[:128]
     features = scaler.transform([features])
     tensor = torch.tensor(features, dtype=torch.float32)
 

@@ -33,7 +33,7 @@ def train():
     train_loader=DataLoader(train_set,batch_size=BATCH_SIZE,shuffle=True)
     test_loader=DataLoader(test_set,batch_size=BATCH_SIZE)
 
-    model=EmotionRegressor()
+    model = EmotionRegressor(feature_dim=176)
     criterion=nn.MSELoss()
     optimizer=torch.optim.Adam(model.parameters(),lr=LR)
 

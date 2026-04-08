@@ -81,18 +81,37 @@
     const res=await fetch('http://127.0.0.1:8000/iso-step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_valence:isoState.curV,current_arousal:isoState.curA,target_valence:isoState.tgtV,target_arousal:isoState.tgtA,step:isoState.step,total_steps:isoState.totalSteps})});
     const d=await res.json();
     isoState.params=d;isoState.musicV=d.current_v;isoState.musicA=d.current_a;
-    document.getElementById('iso-params').innerHTML=`Mode: <b style="color:var(--t)">${d.mode}</b> &nbsp;|&nbsp; Tempo: <b style="color:var(--t)">${d.tempo} BPM</b> &nbsp;|&nbsp; Reverb: <b style="color:var(--t)">${Math.round(d.reverb_wet*100)}%</b><br><span style="color:var(--t3)">${d.description}</span>`;
+
+    document.getElementById('iso-params').innerHTML=
+      `Mode: <b style="color:var(--t)">${d.mode}</b> &nbsp;|&nbsp; `+
+      `Tempo: <b style="color:var(--t)">${d.tempo} BPM</b> &nbsp;|&nbsp; `+
+      `Reverb: <b style="color:var(--t)">${Math.round(d.reverb_wet*100)}%</b><br>`+
+      `<span style="color:var(--t3)">${d.description}</span>`;
     document.getElementById('iso-progress-bar').style.width=Math.round(d.progress*100)+'%';
-    document.getElementById('iso-step-label').textContent='Step '+d.step+' of '+isoState.totalSteps+' · '+Math.round(d.progress*100)+'% toward '+thTgt;
+    document.getElementById('iso-step-label').textContent=
+      'Step '+d.step+' of '+isoState.totalSteps+' · '+Math.round(d.progress*100)+'% toward '+thTgt;
     drawIsoVA();
+
+    // AUTO-PLAY this step immediately
+    await Tone.start();
+    await playIsoStep();
+
+    // Calculate how long this step's music lasts
+    const spb=60/d.tempo;
+    const numNotes=Math.round(8+d.note_density*8);
+    const stepMs=(numNotes*spb*0.5+1.5)*1000;
+
     if(isoState.step<isoState.totalSteps){
       isoState.timer=setTimeout(async()=>{
         isoState.step++;
         isoState.curV+=(isoState.tgtV-isoState.curV)*0.2;
         isoState.curA+=(isoState.tgtA-isoState.curA)*0.2;
         await tickIso();
-      },20000);
-    }else{document.getElementById('th-status').textContent='Journey complete.';isoState.running=false;}
+      }, stepMs);
+    } else {
+      document.getElementById('th-status').textContent='Journey complete. You have arrived at '+thTgt+'.';
+      isoState.running=false;
+    }
   }
 
   async function playIsoStep(){
@@ -110,7 +129,7 @@
     }
   }
 
-  function stopIso(){isoState.running=false;clearTimeout(isoState.timer);document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
+  function stopIso(){isoState.running=false;clearTimeout(isoState.timer);stopIsoMusic();document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
 
   // ── Audio capture & save to library ──────────────────────────────────────
   async function renderAndSaveToLibrary(notes, bass, inner, emotion, descriptor, valence, arousal, bpm) {
@@ -467,25 +486,51 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;ba
 
 <!-- THERAPY -->
 <div id="v-therapy" class="vw">
-  <div class="vw-hd">Therapy Mode</div>
-  <div style="max-width:560px">
-    <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--t3);text-transform:uppercase;margin-bottom:12px">How are you feeling right now?</div>
-    <div class="grid4" id="th-cur" style="margin-bottom:24px">
-      <button class="em-btn" data-e="HAPPY" style="--ec:var(--happy)" onclick="thSel(this,'cur')">HAPPY</button>
-      <button class="em-btn" data-e="SAD" style="--ec:var(--sad)" onclick="thSel(this,'cur')">SAD</button>
-      <button class="em-btn" data-e="ANGRY" style="--ec:var(--angry)" onclick="thSel(this,'cur')">ANGRY</button>
-      <button class="em-btn" data-e="CALM" style="--ec:var(--calm)" onclick="thSel(this,'cur')">CALM</button>
+  <div class="vw-hd">Therapy <span style="font-size:9px;color:var(--t3);letter-spacing:0.1em">ISO-PRINCIPLE</span></div>
+  <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;align-items:start;max-width:860px">
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--t3);text-transform:uppercase;margin-bottom:12px">How are you feeling?</div>
+      <div class="grid4" id="th-cur" style="margin-bottom:20px">
+        <button class="em-btn" data-e="HAPPY" onclick="thSel(this,'cur')">HAPPY</button>
+        <button class="em-btn" data-e="SAD" onclick="thSel(this,'cur')">SAD</button>
+        <button class="em-btn" data-e="ANGRY" onclick="thSel(this,'cur')">ANGRY</button>
+        <button class="em-btn" data-e="CALM" onclick="thSel(this,'cur')">CALM</button>
+      </div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--t3);text-transform:uppercase;margin-bottom:12px">Where do you want to be?</div>
+      <div class="grid4" id="th-tgt" style="margin-bottom:20px">
+        <button class="em-btn" data-e="HAPPY" onclick="thSel(this,'tgt')">HAPPY</button>
+        <button class="em-btn" data-e="SAD" onclick="thSel(this,'tgt')">SAD</button>
+        <button class="em-btn" data-e="ANGRY" onclick="thSel(this,'tgt')">ANGRY</button>
+        <button class="em-btn" data-e="CALM" onclick="thSel(this,'tgt')">CALM</button>
+      </div>
+      <button class="btn-primary" id="th-btn" disabled onclick="startIso()">Begin Iso Journey</button>
+      <div class="status" id="th-status" style="margin-top:8px"></div>
+      <div id="iso-info" style="display:none;margin-top:20px">
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">Current Music Parameters</div>
+          <div id="iso-params" style="font-size:12px;color:var(--t2);line-height:2"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <button class="btn-action prim" onclick="playIsoStep()">&#9654; Play Step</button>
+          <button class="btn-action" onclick="saveIsoStepToLibrary()">&#9733; Save Step</button>
+          <button class="btn-action" onclick="stopIso()">&#9632; Stop</button>
+        </div>
+        <div style="font-size:10px;color:var(--t3);letter-spacing:0.1em;margin-bottom:6px">PROGRESS</div>
+        <div style="height:3px;background:var(--b);border-radius:2px;overflow:hidden">
+          <div id="iso-progress-bar" style="height:100%;background:var(--calm);width:0%;transition:width 1s ease;border-radius:2px"></div>
+        </div>
+        <div id="iso-step-label" style="font-size:10px;color:var(--t3);margin-top:4px"></div>
+      </div>
     </div>
-    <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--t3);text-transform:uppercase;margin-bottom:12px">Where do you want to be?</div>
-    <div class="grid4" id="th-tgt" style="margin-bottom:24px">
-      <button class="em-btn" data-e="HAPPY" style="--ec:var(--happy)" onclick="thSel(this,'tgt')">HAPPY</button>
-      <button class="em-btn" data-e="SAD" style="--ec:var(--sad)" onclick="thSel(this,'tgt')">SAD</button>
-      <button class="em-btn" data-e="ANGRY" style="--ec:var(--angry)" onclick="thSel(this,'tgt')">ANGRY</button>
-      <button class="em-btn" data-e="CALM" style="--ec:var(--calm)" onclick="thSel(this,'tgt')">CALM</button>
+    <div>
+      <div style="font-size:10px;font-weight:600;letter-spacing:0.12em;color:var(--t3);text-transform:uppercase;margin-bottom:10px">Emotional Space</div>
+      <canvas id="iso-va" width="260" height="260" style="width:100%;background:var(--s);border:1px solid var(--b);border-radius:var(--r);display:block"></canvas>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--t3)">
+        <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#ff4a4a;margin-right:4px;vertical-align:middle"></span>You</span>
+        <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#42e8a0;margin-right:4px;vertical-align:middle"></span>Target</span>
+        <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.5);margin-right:4px;vertical-align:middle"></span>Music</span>
+      </div>
     </div>
-    <button class="btn-primary" id="th-btn" disabled onclick="doJourney()">Generate My Journey</button>
-    <div class="status" id="th-status"></div>
-    <div id="th-steps" style="margin-top:20px"></div>
   </div>
 </div>
 
@@ -777,8 +822,17 @@ function thSel(btn,which){
   const grid=which==='cur'?'th-cur':'th-tgt';
   document.querySelectorAll('#'+grid+' .em-btn').forEach(b=>{b.classList.remove('on');b.style.background='';b.style.color='';});
   btn.classList.add('on');const hex=EC[btn.dataset.e]||'#fff';btn.style.background=hex;btn.style.color='#000';
-  if(which==='cur')thCur=btn.dataset.e;else thTgt=btn.dataset.e;
+  if(which==='cur'){
+    thCur=btn.dataset.e;
+    const va=VA_ISO[thCur]||[0,0];
+    isoState.curV=va[0];isoState.curA=va[1];
+  } else {
+    thTgt=btn.dataset.e;
+    const va=VA_ISO[thTgt]||[0,0];
+    isoState.tgtV=va[0];isoState.tgtA=va[1];
+  }
   document.getElementById('th-btn').disabled=!(thCur&&thTgt);
+  drawIsoVA();
 }
 async function doJourney(){
   if(!thCur||!thTgt)return;
@@ -1035,18 +1089,37 @@ function stopLive(){
     const res=await fetch('http://127.0.0.1:8000/iso-step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_valence:isoState.curV,current_arousal:isoState.curA,target_valence:isoState.tgtV,target_arousal:isoState.tgtA,step:isoState.step,total_steps:isoState.totalSteps})});
     const d=await res.json();
     isoState.params=d;isoState.musicV=d.current_v;isoState.musicA=d.current_a;
-    document.getElementById('iso-params').innerHTML=`Mode: <b style="color:var(--t)">${d.mode}</b> &nbsp;|&nbsp; Tempo: <b style="color:var(--t)">${d.tempo} BPM</b> &nbsp;|&nbsp; Reverb: <b style="color:var(--t)">${Math.round(d.reverb_wet*100)}%</b><br><span style="color:var(--t3)">${d.description}</span>`;
+
+    document.getElementById('iso-params').innerHTML=
+      `Mode: <b style="color:var(--t)">${d.mode}</b> &nbsp;|&nbsp; `+
+      `Tempo: <b style="color:var(--t)">${d.tempo} BPM</b> &nbsp;|&nbsp; `+
+      `Reverb: <b style="color:var(--t)">${Math.round(d.reverb_wet*100)}%</b><br>`+
+      `<span style="color:var(--t3)">${d.description}</span>`;
     document.getElementById('iso-progress-bar').style.width=Math.round(d.progress*100)+'%';
-    document.getElementById('iso-step-label').textContent='Step '+d.step+' of '+isoState.totalSteps+' · '+Math.round(d.progress*100)+'% toward '+thTgt;
+    document.getElementById('iso-step-label').textContent=
+      'Step '+d.step+' of '+isoState.totalSteps+' · '+Math.round(d.progress*100)+'% toward '+thTgt;
     drawIsoVA();
+
+    // AUTO-PLAY this step immediately
+    await Tone.start();
+    await playIsoStep();
+
+    // Calculate how long this step's music lasts
+    const spb=60/d.tempo;
+    const numNotes=Math.round(8+d.note_density*8);
+    const stepMs=(numNotes*spb*0.5+1.5)*1000;
+
     if(isoState.step<isoState.totalSteps){
       isoState.timer=setTimeout(async()=>{
         isoState.step++;
         isoState.curV+=(isoState.tgtV-isoState.curV)*0.2;
         isoState.curA+=(isoState.tgtA-isoState.curA)*0.2;
         await tickIso();
-      },20000);
-    }else{document.getElementById('th-status').textContent='Journey complete.';isoState.running=false;}
+      }, stepMs);
+    } else {
+      document.getElementById('th-status').textContent='Journey complete. You have arrived at '+thTgt+'.';
+      isoState.running=false;
+    }
   }
 
   async function playIsoStep(){
@@ -1064,7 +1137,7 @@ function stopLive(){
     }
   }
 
-  function stopIso(){isoState.running=false;clearTimeout(isoState.timer);document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
+  function stopIso(){isoState.running=false;clearTimeout(isoState.timer);stopIsoMusic();document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
 
   // ── Audio capture & save to library ──────────────────────────────────────
   async function renderAndSaveToLibrary(notes, bass, inner, emotion, descriptor, valence, arousal, bpm) {
