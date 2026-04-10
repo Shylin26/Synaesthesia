@@ -15,6 +15,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Initialize DB on startup
+try:
+    from engine.db import setup_db
+    from engine.emotion_tracker import setup_tracker
+    setup_db()
+    setup_tracker()
+except Exception as e:
+    print(f"DB init warning: {e}")
 from engine.pipeline import run_pipeline
 from engine.emotion_tracker import get_emotional_arc, new_session_id
 from engine.performance_analyzer import analyze_performance

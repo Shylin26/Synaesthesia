@@ -10,7 +10,7 @@
   let libAudio=null;
   async function loadLibrary(){
     try{
-      const res=await fetch('http://127.0.0.1:8000/library');
+      const res=await fetch(API+'/library');
       const tracks=await res.json();
       const grid=document.getElementById('lib-grid');
       const empty=document.getElementById('lib-empty');
@@ -28,7 +28,7 @@
             <div style="font-size:11px;color:var(--t3)">V:${t.valence} A:${t.arousal} · ${t.bpm} BPM · ${t.duration}s · ${(t.created_at||'').slice(0,10)}</div>
           </div>
           <button onclick="playLib('${t.id}')" style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;cursor:pointer">&#9654; Play</button>
-          <a href="http://127.0.0.1:8000/library/${t.id}/play" download style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;text-decoration:none">&#8681;</a>
+          <a href=API+"/library/${t.id}/play" download style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;text-decoration:none">&#8681;</a>
         `;
         grid.appendChild(el);
       });
@@ -36,7 +36,7 @@
   }
   function playLib(id){
     if(libAudio){libAudio.pause();libAudio=null;}
-    libAudio=new Audio('http://127.0.0.1:8000/library/'+id+'/play');
+    libAudio=new Audio(API+'/library/'+id+'/play');
     libAudio.play().catch(e=>console.error(e));
   }
 
@@ -78,7 +78,7 @@
 
   async function tickIso(){
     if(!isoState.running)return;
-    const res=await fetch('http://127.0.0.1:8000/iso-step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_valence:isoState.curV,current_arousal:isoState.curA,target_valence:isoState.tgtV,target_arousal:isoState.tgtA,step:isoState.step,total_steps:isoState.totalSteps})});
+    const res=await fetch(API+'/iso-step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_valence:isoState.curV,current_arousal:isoState.curA,target_valence:isoState.tgtV,target_arousal:isoState.tgtA,step:isoState.step,total_steps:isoState.totalSteps})});
     const d=await res.json();
     isoState.params=d;isoState.musicV=d.current_v;isoState.musicA=d.current_a;
 
@@ -180,7 +180,7 @@
     fd.append('bpm', bpm || 90);
     if(sessionId) fd.append('session_id', sessionId);
 
-    const res = await fetch('http://127.0.0.1:8000/library/save-audio', {method:'POST', body:fd});
+    const res = await fetch(API+'/library/save-audio', {method:'POST', body:fd});
     return await res.json();
   }
 
@@ -713,7 +713,7 @@ async function doAnalyse(){
   document.getElementById('idle').style.display='flex';
   const fd=new FormData();fd.append('file',selFile);
   try{
-    const r=await fetch('http://127.0.0.1:8000/analyze?session_id='+sid,{method:'POST',body:fd});
+    const r=await fetch(API+'/analyze?session_id='+sid,{method:'POST',body:fd});
     if(!r.ok)throw new Error(await r.text());
     renderResult(await r.json());anSt.textContent='';
   }catch(e){anSt.textContent='Error: '+e.message;}
@@ -799,7 +799,7 @@ document.getElementById('play-btn').addEventListener('click',async()=>{
 // midi
 document.getElementById('midi-btn').addEventListener('click',async()=>{
   if(!notes.length)return;
-  const r=await fetch('http://127.0.0.1:8000/export-midi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes,emotion:curEm,bpm:curBpm})});
+  const r=await fetch(API+'/export-midi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes,emotion:curEm,bpm:curBpm})});
   const blob=await r.blob();
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='synaesthesia_'+curEm.toLowerCase()+'.mid';a.click();URL.revokeObjectURL(url);
@@ -844,7 +844,7 @@ async function doJourney(){
   document.getElementById('th-status').innerHTML='<span class="spin"></span>Generating…';
   document.getElementById('th-steps').innerHTML='';
   try{
-    const r=await fetch(`http://127.0.0.1:8000/transition/${thCur}?target=${thTgt}`);
+    const r=await fetch(`${API}/transition/${thCur}?target=${thTgt}`);
     const d=await r.json();
     document.getElementById('th-status').textContent=d.num_steps+' steps · distance '+d.emotional_distance;
     d.steps.forEach((step,i)=>{
@@ -891,7 +891,7 @@ async function doEdu(){
   document.getElementById('edu-result').style.display='none';
   const fd=new FormData();fd.append('file',eduFile);fd.append('target_emotion',eduTgt);
   try{
-    const r=await fetch('http://127.0.0.1:8000/analyze-performance',{method:'POST',body:fd});
+    const r=await fetch(API+'/analyze-performance',{method:'POST',body:fd});
     if(!r.ok)throw new Error(await r.text());
     const d=await r.json();
     const hex=EC[d.target_emotion]||'#fff';
@@ -922,7 +922,7 @@ async function doEdu(){
 async function loadMem(){
   if(!sid){document.getElementById('mem-empty').textContent='No session yet — analyse some audio first.';return;}
   try{
-    const r=await fetch('http://127.0.0.1:8000/session/'+sid);
+    const r=await fetch(API+'/session/'+sid);
     const d=await r.json();
     if(!d.readings||!d.readings.length){document.getElementById('mem-empty').style.display='block';return;}
     document.getElementById('mem-empty').style.display='none';
@@ -975,7 +975,7 @@ function toggleLive(){liveOn?stopLive():startLive();}
 async function startLive(){
   try{
     const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    liveWs=new WebSocket('ws://127.0.0.1:8000/ws/stream');
+    liveWs=new WebSocket(WS_API+'/ws/stream');
     liveWs.onopen=()=>{
       liveOn=true;
       document.getElementById('live-btn').textContent='Stop Live Stream';
@@ -1023,7 +1023,7 @@ function stopLive(){
   let libAudio=null;
   async function loadLibrary(){
     try{
-      const res=await fetch('http://127.0.0.1:8000/library');
+      const res=await fetch(API+'/library');
       const tracks=await res.json();
       const grid=document.getElementById('lib-grid');
       const empty=document.getElementById('lib-empty');
@@ -1041,7 +1041,7 @@ function stopLive(){
             <div style="font-size:11px;color:var(--t3)">V:${t.valence} A:${t.arousal} · ${t.bpm} BPM · ${t.duration}s · ${(t.created_at||'').slice(0,10)}</div>
           </div>
           <button onclick="playLib('${t.id}')" style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;cursor:pointer">&#9654; Play</button>
-          <a href="http://127.0.0.1:8000/library/${t.id}/play" download style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;text-decoration:none">&#8681;</a>
+          <a href=API+"/library/${t.id}/play" download style="padding:6px 12px;background:transparent;border:1px solid var(--b2);border-radius:8px;color:var(--t2);font-size:11px;text-decoration:none">&#8681;</a>
         `;
         grid.appendChild(el);
       });
@@ -1049,7 +1049,7 @@ function stopLive(){
   }
   function playLib(id){
     if(libAudio){libAudio.pause();libAudio=null;}
-    libAudio=new Audio('http://127.0.0.1:8000/library/'+id+'/play');
+    libAudio=new Audio(API+'/library/'+id+'/play');
     libAudio.play().catch(e=>console.error(e));
   }
 
@@ -1091,7 +1091,7 @@ function stopLive(){
 
   async function tickIso(){
     if(!isoState.running)return;
-    const res=await fetch('http://127.0.0.1:8000/iso-step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_valence:isoState.curV,current_arousal:isoState.curA,target_valence:isoState.tgtV,target_arousal:isoState.tgtA,step:isoState.step,total_steps:isoState.totalSteps})});
+    const res=await fetch(API+'/iso-step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_valence:isoState.curV,current_arousal:isoState.curA,target_valence:isoState.tgtV,target_arousal:isoState.tgtA,step:isoState.step,total_steps:isoState.totalSteps})});
     const d=await res.json();
     isoState.params=d;isoState.musicV=d.current_v;isoState.musicA=d.current_a;
 
@@ -1193,7 +1193,7 @@ function stopLive(){
     fd.append('bpm', bpm || 90);
     if(sessionId) fd.append('session_id', sessionId);
 
-    const res = await fetch('http://127.0.0.1:8000/library/save-audio', {method:'POST', body:fd});
+    const res = await fetch(API+'/library/save-audio', {method:'POST', body:fd});
     return await res.json();
   }
 
