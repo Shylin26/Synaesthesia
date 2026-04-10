@@ -232,6 +232,40 @@
       document.getElementById('th-status').textContent = 'Step saved to library.';
     } catch(e) { console.error(e); }
   }
+
+  // ── Spotify Recommendations ───────────────────────────────────────────────
+  let spAudio = null;
+
+  function renderSpotify(tracks) {
+    const panel = document.getElementById('spotify-panel');
+    const container = document.getElementById('spotify-tracks');
+    container.innerHTML = '';
+    if (!tracks || !tracks.length) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    tracks.forEach(t => {
+      const el = document.createElement('a');
+      el.className = 'sp-track';
+      el.href = t.spotify_url || '#';
+      el.target = '_blank';
+      el.innerHTML = `
+        <img class="sp-img" src="${t.image||''}" alt="${t.name}" onerror="this.style.display='none'">
+        <div class="sp-info">
+          <div class="sp-name">${t.name}</div>
+          <div class="sp-artist">${t.artist} · ${t.album}</div>
+        </div>
+        <button class="sp-play" ${t.preview_url?'':'disabled'} onclick="playPreview(event,'${t.preview_url||''}')">&#9654;</button>
+      `;
+      container.appendChild(el);
+    });
+  }
+
+  function playPreview(e, url) {
+    e.preventDefault(); e.stopPropagation();
+    if (!url) return;
+    if (spAudio) { spAudio.pause(); spAudio = null; }
+    spAudio = new Audio(url);
+    spAudio.play();
+  }
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -483,6 +517,10 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;ba
           <button class="btn-action prim" id="play-btn">&#9654; Play Melody</button>
           <button class="btn-action" id="midi-btn">&#8681; Download MIDI</button>
           <button class="btn-action" id="save-lib-btn" style="display:none" onclick="saveCurrentToLibrary()">&#9733; Save</button>
+        </div>
+        <div id="spotify-panel" style="display:none;margin-top:16px">
+          <div class="card-title" style="margin-bottom:12px">&#9835; Songs That Match This Feeling</div>
+          <div id="spotify-tracks" style="display:flex;flex-direction:column;gap:8px"></div>
         </div>
       </div>
     </div>
@@ -1244,6 +1282,40 @@ function stopLive(){
       await renderAndSaveToLibrary(notes, [], [], thTgt||'CALM', p.mode+' '+p.tempo+'bpm', isoState.tgtV, isoState.tgtA, p.tempo);
       document.getElementById('th-status').textContent = 'Step saved to library.';
     } catch(e) { console.error(e); }
+  }
+
+  // ── Spotify Recommendations ───────────────────────────────────────────────
+  let spAudio = null;
+
+  function renderSpotify(tracks) {
+    const panel = document.getElementById('spotify-panel');
+    const container = document.getElementById('spotify-tracks');
+    container.innerHTML = '';
+    if (!tracks || !tracks.length) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    tracks.forEach(t => {
+      const el = document.createElement('a');
+      el.className = 'sp-track';
+      el.href = t.spotify_url || '#';
+      el.target = '_blank';
+      el.innerHTML = `
+        <img class="sp-img" src="${t.image||''}" alt="${t.name}" onerror="this.style.display='none'">
+        <div class="sp-info">
+          <div class="sp-name">${t.name}</div>
+          <div class="sp-artist">${t.artist} · ${t.album}</div>
+        </div>
+        <button class="sp-play" ${t.preview_url?'':'disabled'} onclick="playPreview(event,'${t.preview_url||''}')">&#9654;</button>
+      `;
+      container.appendChild(el);
+    });
+  }
+
+  function playPreview(e, url) {
+    e.preventDefault(); e.stopPropagation();
+    if (!url) return;
+    if (spAudio) { spAudio.pause(); spAudio = null; }
+    spAudio = new Audio(url);
+    spAudio.play();
   }
 </script>
 </body>

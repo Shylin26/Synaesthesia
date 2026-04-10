@@ -14,6 +14,7 @@ from engine.db import recognize_audio
 from engine.emotion_tracker import setup_tracker, log_emotion, new_session_id
 from engine.chord_generator import generate_chords_from_pipeline
 from engine.music_library import save_melody_to_library
+from engine.spotify_recommender import recommend_songs
 
 setup_tracker()
 
@@ -102,6 +103,17 @@ def run_pipeline(audio_path:str, melody_length:int=20, temperature:float=0.8, se
         session_id=session_id,
     )
     result["track_id"] = library_entry["id"]
+
+    try:
+        spotify_tracks = recommend_songs(
+            valence=emotion_result.get("valence", 5.0),
+            arousal=emotion_result.get("arousal", 5.0),
+            limit=5
+        )
+        result["spotify"] = spotify_tracks
+    except Exception:
+        result["spotify"] = []
+
     return result
    
 if __name__ == "__main__":

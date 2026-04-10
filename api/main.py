@@ -30,6 +30,7 @@ from engine.performance_analyzer import analyze_performance
 from engine.transition_engine import get_transition_path
 from engine.audio_generator import generate_audio
 from engine.music_library import get_library, get_track_path
+from engine.spotify_recommender import recommend_songs
 from api.ws_stream import stream_emotion
 class MidiRequest(BaseModel):
     notes: List[int]
@@ -211,6 +212,15 @@ async def websocket_stream(websocket: WebSocket):
 @app.get("/transition/{current_emotion}")
 def transition(current_emotion: str, target: str = "CALM"):
     return get_transition_path(current_emotion, target)
+
+
+@app.get("/spotify/recommend")
+def spotify_recommend(valence: float = 5.0, arousal: float = 5.0, limit: int = 5):
+    try:
+        tracks = recommend_songs(valence, arousal, limit)
+        return {"tracks": tracks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/iso-step")
