@@ -120,20 +120,73 @@
   }
 
   async function playIsoStep(){
-    if(!isoState.params)return;
+    if(!isoState.params) return;
+    stopIsoMusic();
     await Tone.start();
-    const p=isoState.params,spb=60/p.tempo;
-    const reverb=new Tone.Reverb({decay:2+p.reverb_wet*4,wet:p.reverb_wet}).toDestination();
-    const synth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:p.mode==='major'?'triangle8':'sine'},envelope:{attack:0.05,decay:0.4,sustain:0.4,release:1.5+p.reverb_wet*2},volume:-5}).connect(reverb);
-    const SCALES={major:[60,62,64,65,67,69,71,72],dorian:[60,62,63,65,67,69,70,72],minor:[60,62,63,65,67,68,70,72],phrygian:[60,61,63,65,67,68,70,72]};
-    const scale=SCALES[p.mode]||SCALES.minor;
-    const n=Math.round(8+p.note_density*8),now=Tone.now();
-    for(let i=0;i<n;i++){
-      const freq=Tone.Frequency(scale[Math.floor(Math.random()*scale.length)],'midi').toFrequency();
-      synth.triggerAttackRelease(freq,Math.random()<0.2?'4n':'8n',now+i*spb*0.5+(Math.random()-0.5)*0.02);
+
+    const p = isoState.params;
+    const SCALES = {
+      major:    [60,62,64,65,67,69,71,72,74,76],
+      dorian:   [60,62,63,65,67,69,70,72,74,75],
+      minor:    [57,59,60,62,64,65,67,69,71,72],
+      phrygian: [60,61,63,65,67,68,70,72,73,75],
+    };
+    const scale = SCALES[p.mode] || SCALES.minor;
+    Tone.Transport.bpm.value = p.tempo;
+
+    const reverb = new Tone.Reverb({decay: 1.5 + p.reverb_wet * 5, wet: p.reverb_wet}).toDestination();
+    const delay = new Tone.FeedbackDelay({delayTime: '8n', feedback: 0.2, wet: 0.12}).connect(reverb);
+    const chorus = new Tone.Chorus({frequency:1.2, delayTime:3, depth:0.3, wet:0.15}).connect(delay);
+
+    const oscType = p.mode === 'major' ? 'triangle8' : p.mode === 'phrygian' ? 'sawtooth' : 'sine';
+    const melodySynth = new Tone.Synth({
+      oscillator: {type: oscType},
+      envelope: {attack: 0.04 + p.reverb_wet*0.1, decay: 0.3, sustain: 0.4, release: 1.2 + p.reverb_wet*2},
+      volume: -5
+    }).connect(chorus);
+
+    const bassSynth = new Tone.Synth({
+      oscillator: {type: 'sine'},
+      envelope: {attack: 0.06, decay: 0.5, sustain: 0.7, release: 2.0},
+      volume: -10
+    }).connect(reverb);
+
+    _isoSynths = [melodySynth, bassSynth, reverb, delay, chorus];
+
+    // Build melodic phrase
+    const density = p.note_density;
+    let scaleIdx = Math.floor(scale.length * 0.5);
+    const phrase = [];
+    for(let i=0; i<16; i++){
+      if(Math.random() < density){
+        const jump = Math.random() < 0.7 ? (Math.random()<0.5?1:-1) : (Math.random()<0.5?2:-2);
+        scaleIdx = Math.max(0, Math.min(scale.length-1, scaleIdx + jump));
+        phrase.push({note: scale[scaleIdx], dur: Math.random()<0.15?'4n':'8n'});
+      } else {
+        phrase.push(null);
+      }
     }
+
+    const bassRoot = scale[0] - 12;
+    const bassPattern = [bassRoot, null, scale[2]-12, null, bassRoot, null, scale[4]-12, null];
+
+    const seq = new Tone.Sequence((time, idx) => {
+      const mel = phrase[idx % phrase.length];
+      if(mel) melodySynth.triggerAttackRelease(Tone.Frequency(mel.note,'midi').toFrequency(), mel.dur, time, 0.6+Math.random()*0.3);
+      const bass = bassPattern[idx % bassPattern.length];
+      if(bass) bassSynth.triggerAttackRelease(Tone.Frequency(bass,'midi').toFrequency(), '4n', time, 0.5);
+    }, [...Array(16).keys()], '8n');
+
+    seq.start(0);
+    _isoSynths.push(seq);
+    Tone.Transport.start();
   }
 
+  function stopIsoMusic(){
+    try { Tone.Transport.stop(); Tone.Transport.cancel(); } catch(e){}
+    _isoSynths.forEach(s=>{ try{ s.dispose(); }catch(e){} });
+    _isoSynths=[];
+  }
   function stopIso(){isoState.running=false;clearTimeout(isoState.timer);stopIsoMusic();document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
 
   // ── Audio capture & save to library ──────────────────────────────────────
@@ -1185,6 +1238,11 @@ function stopLive(){
     }
   }
 
+  function stopIsoMusic(){
+    try { Tone.Transport.stop(); Tone.Transport.cancel(); } catch(e){}
+    _isoSynths.forEach(s=>{ try{ s.dispose(); }catch(e){} });
+    _isoSynths=[];
+  }
   function stopIso(){isoState.running=false;clearTimeout(isoState.timer);stopIsoMusic();document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
 
   // ── Audio capture & save to library ──────────────────────────────────────
