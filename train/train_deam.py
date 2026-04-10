@@ -11,9 +11,9 @@ from engine.emotion_regressor import EmotionRegressor
 DATASET_PATH=os.path.join(os.path.dirname(__file__),'..','data','deam_dataset.npz')
 MODEL_SAVE_PATH=os.path.join(os.path.dirname(__file__),'..','models','emotion_regressor.pt')
 SCALER_SAVE_PATH=os.path.join(os.path.dirname(__file__),'..','models','deam_scaler.pkl')
-EPOCHS=80
+EPOCHS=150
 BATCH_SIZE=32
-LR=0.001
+LR=0.0005
 def train():
     data=np.load(DATASET_PATH)
     X,valence,arousal=data['X'],data['valence'],data['arousal']
@@ -34,8 +34,10 @@ def train():
     test_loader=DataLoader(test_set,batch_size=BATCH_SIZE)
 
     model = EmotionRegressor(feature_dim=176)
-    criterion=nn.MSELoss()
+    criterion=nn.HuberLoss(delta=1.0)
     optimizer=torch.optim.Adam(model.parameters(),lr=LR)
+    scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=EPOCHS,eta_min=1e-5)
+
 
     print("Training...")
     for epoch in range(EPOCHS):
@@ -50,6 +52,7 @@ def train():
             total_loss+=loss.item()
         
         if(epoch+1)%10==0:
+            
             model.eval()
             mae_v,mae_a,n=0,0,0
             with torch.no_grad():
@@ -61,6 +64,7 @@ def train():
             
             avg_loss=total_loss/len(train_loader)
             print(f"Epoch {epoch+1:02d}/{EPOCHS} | Loss: {avg_loss:.4f} | MAE V: {mae_v/n:.3f} A: {mae_a/n:.3f}")
+            scheduler.step()
 
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
     print(f"\nModel saved to {MODEL_SAVE_PATH}")

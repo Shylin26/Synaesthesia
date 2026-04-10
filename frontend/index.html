@@ -92,25 +92,30 @@
       'Step '+d.step+' of '+isoState.totalSteps+' · '+Math.round(d.progress*100)+'% toward '+thTgt;
     drawIsoVA();
 
-    // AUTO-PLAY this step immediately
+    // Start music for this step (non-blocking — music loops continuously)
     await Tone.start();
-    await playIsoStep();
+    playIsoStep();  // intentionally not awaited — music runs in background
 
-    // Calculate how long this step's music lasts
-    const spb=60/d.tempo;
-    const numNotes=Math.round(8+d.note_density*8);
-    const stepMs=(numNotes*spb*0.5+1.5)*1000;
+    // Each step lasts 20 seconds regardless of music length
+    // This gives the listener time to absorb each emotional position
+    const STEP_DURATION_MS = 20000;
 
-    if(isoState.step<isoState.totalSteps){
-      isoState.timer=setTimeout(async()=>{
+    if(isoState.step < isoState.totalSteps){
+      isoState.timer = setTimeout(async()=>{
+        if(!isoState.running) return;
         isoState.step++;
-        isoState.curV+=(isoState.tgtV-isoState.curV)*0.2;
-        isoState.curA+=(isoState.tgtA-isoState.curA)*0.2;
+        // Move 20% closer to target each step (iso principle lerp)
+        isoState.curV += (isoState.tgtV - isoState.curV) * 0.2;
+        isoState.curA += (isoState.tgtA - isoState.curA) * 0.2;
         await tickIso();
-      }, stepMs);
+      }, STEP_DURATION_MS);
     } else {
-      document.getElementById('th-status').textContent='Journey complete. You have arrived at '+thTgt+'.';
-      isoState.running=false;
+      // Journey complete — let current music fade naturally
+      setTimeout(() => {
+        stopIsoMusic();
+        document.getElementById('th-status').textContent = 'Journey complete. You have arrived at ' + thTgt + '.';
+        isoState.running = false;
+      }, 4000);
     }
   }
 
@@ -1100,25 +1105,30 @@ function stopLive(){
       'Step '+d.step+' of '+isoState.totalSteps+' · '+Math.round(d.progress*100)+'% toward '+thTgt;
     drawIsoVA();
 
-    // AUTO-PLAY this step immediately
+    // Start music for this step (non-blocking — music loops continuously)
     await Tone.start();
-    await playIsoStep();
+    playIsoStep();  // intentionally not awaited — music runs in background
 
-    // Calculate how long this step's music lasts
-    const spb=60/d.tempo;
-    const numNotes=Math.round(8+d.note_density*8);
-    const stepMs=(numNotes*spb*0.5+1.5)*1000;
+    // Each step lasts 20 seconds regardless of music length
+    // This gives the listener time to absorb each emotional position
+    const STEP_DURATION_MS = 20000;
 
-    if(isoState.step<isoState.totalSteps){
-      isoState.timer=setTimeout(async()=>{
+    if(isoState.step < isoState.totalSteps){
+      isoState.timer = setTimeout(async()=>{
+        if(!isoState.running) return;
         isoState.step++;
-        isoState.curV+=(isoState.tgtV-isoState.curV)*0.2;
-        isoState.curA+=(isoState.tgtA-isoState.curA)*0.2;
+        // Move 20% closer to target each step (iso principle lerp)
+        isoState.curV += (isoState.tgtV - isoState.curV) * 0.2;
+        isoState.curA += (isoState.tgtA - isoState.curA) * 0.2;
         await tickIso();
-      }, stepMs);
+      }, STEP_DURATION_MS);
     } else {
-      document.getElementById('th-status').textContent='Journey complete. You have arrived at '+thTgt+'.';
-      isoState.running=false;
+      // Journey complete — let current music fade naturally
+      setTimeout(() => {
+        stopIsoMusic();
+        document.getElementById('th-status').textContent = 'Journey complete. You have arrived at ' + thTgt + '.';
+        isoState.running = false;
+      }, 4000);
     }
   }
 

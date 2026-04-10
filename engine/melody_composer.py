@@ -55,8 +55,8 @@ def _compose_melody_voice(scale: list, length: int, params: dict, start_idx: int
     current_idx = start_idx if start_idx is not None else len(scale) // 2 + 2
 
     motif = []
-    motif_length = random.choice([4, 8])
-    use_motif = random.random() < 0.3
+    motif_length = 4
+    use_motif = True
 
     for step in range(length):
         if use_motif and step % 8 >= motif_length and len(motif) >= motif_length:
