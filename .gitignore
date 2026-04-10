@@ -2,9 +2,10 @@
 __pycache__/
 *.pyc
 *.pyo
-*.pt
-*.pkl
 data/ravdess/
 data/dataset.npz
+data/deam_dataset.npz
+data/music_dataset.npz
 *.DS_Store
 build_frontend.py
+write_frontend.py
