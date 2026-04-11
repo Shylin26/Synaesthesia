@@ -19,11 +19,17 @@ from engine.spotify_recommender import recommend_songs
 setup_tracker()
 
 MELODY_MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'melody_transformer.pt')
+
+_melody_model_cache = None
+
 def load_melody_model():
-    model=MelodyTransformer()
-    model.load_state_dict(torch.load(MELODY_MODEL_PATH,map_location='cpu'))
-    model.eval()
-    return model
+    global _melody_model_cache
+    if _melody_model_cache is None:
+        model = MelodyTransformer()
+        model.load_state_dict(torch.load(MELODY_MODEL_PATH, map_location='cpu'))
+        model.eval()
+        _melody_model_cache = model
+    return _melody_model_cache
 EMOTION_PROMPTS = {
     "HAPPY":     torch.tensor([[60, 64, 67, 72]]),
     "SAD":       torch.tensor([[57, 60, 64, 67]]),

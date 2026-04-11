@@ -10,6 +10,8 @@ from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
 
+os.environ.setdefault("PYTORCH_NO_CUDA_MEMORY_CACHING", "1")
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

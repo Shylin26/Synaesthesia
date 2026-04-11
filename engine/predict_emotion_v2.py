@@ -80,13 +80,18 @@ def va_to_musical_params(v_norm: float, a_norm: float) -> dict:
         "arpeggiation": min(1.0, arpeggiation)
     }
 
+_regressor_cache = None
+
 def load_regressor():
-    model = EmotionRegressor(feature_dim=176, d_model=64, nhead=4, num_layers=2)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'), strict=False)
-    model.eval()
-    with open(SCALER_PATH, 'rb') as f:
-        scaler = pickle.load(f)
-    return model, scaler
+    global _regressor_cache
+    if _regressor_cache is None:
+        model = EmotionRegressor(feature_dim=176, d_model=64, nhead=4, num_layers=2)
+        model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'), strict=False)
+        model.eval()
+        with open(SCALER_PATH, 'rb') as f:
+            scaler = pickle.load(f)
+        _regressor_cache = (model, scaler)
+    return _regressor_cache
 
 def predict_emotion_v2(file_path: str) -> dict:
     model, scaler = load_regressor()
