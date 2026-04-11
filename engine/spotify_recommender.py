@@ -2,8 +2,21 @@ import os
 import requests
 import base64
 
-SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "REDACTED_SPOTIFY_CLIENT_ID")
-SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "REDACTED_SPOTIFY_CLIENT_SECRET")
+
+class SpotifyNotConfiguredError(Exception):
+    """Raised when SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET are unset."""
+
+
+def _spotify_creds() -> tuple[str, str]:
+    client_id = (os.environ.get("SPOTIFY_CLIENT_ID") or "").strip()
+    client_secret = (os.environ.get("SPOTIFY_CLIENT_SECRET") or "").strip()
+    if not client_id or not client_secret:
+        raise SpotifyNotConfiguredError(
+            "Spotify is not configured. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET "
+            "(for example in a .env file that is not committed — see .env.example)."
+        )
+    return client_id, client_secret
+
 
 _token_cache = {"token": None, "expires_at": 0}
 
@@ -11,7 +24,8 @@ def _get_token() -> str:
     import time
     if _token_cache["token"] and time.time() < _token_cache["expires_at"]:
         return _token_cache["token"]
-    creds = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
+    client_id, client_secret = _spotify_creds()
+    creds = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
     resp = requests.post(
         "https://accounts.spotify.com/api/token",
         headers={"Authorization": f"Basic {creds}"},

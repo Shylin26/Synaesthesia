@@ -30,7 +30,7 @@ from engine.performance_analyzer import analyze_performance
 from engine.transition_engine import get_transition_path
 from engine.audio_generator import generate_audio
 from engine.music_library import get_library, get_track_path
-from engine.spotify_recommender import recommend_songs
+from engine.spotify_recommender import recommend_songs, SpotifyNotConfiguredError
 from api.ws_stream import stream_emotion
 class MidiRequest(BaseModel):
     notes: List[int]
@@ -219,6 +219,8 @@ def spotify_recommend(valence: float = 5.0, arousal: float = 5.0, limit: int = 5
     try:
         tracks = recommend_songs(valence, arousal, limit)
         return {"tracks": tracks}
+    except SpotifyNotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

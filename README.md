@@ -114,6 +114,10 @@ uvicorn api.main:app --reload --port 8000
 
 Open `http://localhost:8000`
 
+### Spotify recommendations (optional)
+
+Track suggestions use Spotify’s API. Copy `.env.example` to `.env`, set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`, then restart the server. If those variables are unset, the rest of the app still runs; Spotify sections simply stay empty. If credentials were ever committed or leaked, rotate the client secret in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) before reusing them.
+
 ---
 
 ## Research context
