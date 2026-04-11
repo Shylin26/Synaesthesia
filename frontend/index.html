@@ -423,7 +423,6 @@ const EC={HAPPY:'#f5c842',SAD:'#4a9eff',ANGRY:'#ff4a4a',CALM:'#42e8a0',UNCERTAIN
 const ECR={HAPPY:[245,200,66],SAD:[74,158,255],ANGRY:[255,74,74],CALM:[66,232,160]};
 const VA={HAPPY:[0.7,0.6],SAD:[-0.6,-0.5],ANGRY:[-0.4,0.75],CALM:[0.55,-0.6]};
 // Same origin on Render (one web service). Optional: server injects window.__SYN_API_BASE__ from SYN_API_BASE env.
-const API=(typeof window.__SYN_API_BASE__==='string')?window.__SYN_API_BASE__:((location.protocol==='http:'||location.protocol==='https:')?'':'http://localhost:8000');
 const WS_PROTO=location.protocol==='https:'?'wss':'ws';
 const WS_API=WS_PROTO+'://'+(location.host||'localhost:8000');
 const VA_ISO={HAPPY:[0.7,0.6],SAD:[-0.6,-0.5],ANGRY:[-0.4,0.75],CALM:[0.55,-0.6]};
