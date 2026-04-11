@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import shutil
@@ -12,7 +13,7 @@ from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -70,10 +71,21 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 @app.get("/")
 def serve_frontend():
-    response = FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
+    """Serve SPA. On Render (single web service) the browser uses same-origin relative API paths."""
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    cache_headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    if "SYN_API_BASE" in os.environ:
+        html = Path(index_path).read_text(encoding="utf-8")
+        base = os.environ["SYN_API_BASE"].strip()
+        snippet = f'<script>window.__SYN_API_BASE__={json.dumps(base)};</script>'
+        if "</head>" in html:
+            html = html.replace("</head>", snippet + "\n</head>", 1)
+        return HTMLResponse(content=html, headers=cache_headers)
+    response = FileResponse(index_path, headers=cache_headers)
     return response
 
 

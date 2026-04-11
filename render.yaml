@@ -7,3 +7,11 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
+      # Set values in the Render Dashboard (Secrets) — required for Spotify recommendations:
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      # Only if the UI is hosted on a different origin than this API (rare); otherwise omit:
+      # - key: SYN_API_BASE
+      #   value: https://your-api-host.example.com
