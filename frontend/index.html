@@ -869,16 +869,26 @@ function stopLive(){
     if(isoState.running) dot(isoState.musicV,isoState.musicA,'rgba(255,255,255,0.6)',4);
   }
 
+  let _isoAnimFrame=null;
+  function _isoAnimate(){
+    if(!isoState.running){_isoAnimFrame=null;return;}
+    isoState.musicV+=(isoState.curV-isoState.musicV)*0.03;
+    isoState.musicA+=(isoState.curA-isoState.musicA)*0.03;
+    drawIsoVA();
+    _isoAnimFrame=requestAnimationFrame(_isoAnimate);
+  }
   async function startIso(){
     if(!thCur||!thTgt)return;
     clearTimeout(isoState.timer);
     stopIsoMusic();
+    if(_isoAnimFrame){cancelAnimationFrame(_isoAnimFrame);_isoAnimFrame=null;}
     const[cv,ca]=VA_ISO[thCur]||[0,0];
     const[tv,ta]=VA_ISO[thTgt]||[0.55,-0.6];
     isoState={running:true,step:0,totalSteps:12,curV:cv,curA:ca,tgtV:tv,tgtA:ta,musicV:cv,musicA:ca,timer:null,params:null};
     document.getElementById('iso-info').style.display='block';
     document.getElementById('th-status').textContent='Iso journey started toward '+thTgt;
     drawIsoVA();
+    _isoAnimate();
     await tickIso();
   }
 
@@ -954,7 +964,7 @@ function stopLive(){
     (_isoSynths||[]).forEach(s=>{ try{ s.dispose(); }catch(e){} });
     _isoSynths=[];
   }
-  function stopIso(){isoState.running=false;clearTimeout(isoState.timer);stopIsoMusic();document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
+  function stopIso(){if(_isoAnimFrame){cancelAnimationFrame(_isoAnimFrame);_isoAnimFrame=null;}isoState.running=false;clearTimeout(isoState.timer);if(_isoAnimFrame){cancelAnimationFrame(_isoAnimFrame);_isoAnimFrame=null;}stopIsoMusic();document.getElementById('th-status').textContent='Journey paused.';document.getElementById('iso-info').style.display='none';}
 
   // ── Audio capture & save to library ──────────────────────────────────────
   async function renderAndSaveToLibrary(notes, bass, inner, emotion, descriptor, valence, arousal, bpm) {
